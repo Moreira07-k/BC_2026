@@ -151,8 +151,8 @@ function calcFrete(cidade: string, uf: string): number {
   const key = cidade.trim().toLowerCase()
     .normalize("NFD").replace(/[̀-ͯ]/g, "");
   const estado = uf.trim().toUpperCase();
-  if (key === "floriano" && estado === "PI") return 3.00;
-  if (key === "barao de grajau" && estado === "MA") return 4.00;
+  if (key === "floriano" && estado === "PI") return 5.00;
+  if (key === "barao de grajau" && estado === "MA") return 8.00;
   return -1;
 }
 
