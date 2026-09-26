@@ -117,6 +117,66 @@ alter table customers drop constraint if exists customers_name_key;
 -- O site público registra pedidos por uma única função controlada. Assim,
 -- clientes e pedidos continuam protegidos por RLS e o navegador não precisa
 -- receber permissão de leitura desses dados sensíveis.
+-- Registra/atualiza o cliente assim que ele preenche nome e telefone no site.
+create or replace function public.save_public_customer(
+  p_customer_name text,
+  p_phone text,
+  p_email text default null,
+  p_city text default ''
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_customer_id bigint;
+  v_phone text := regexp_replace(coalesce(p_phone,''), '[^0-9]', '', 'g');
+  v_now text := current_date::text;
+begin
+  if coalesce(length(trim(p_customer_name)), 0) < 2 then
+    raise exception 'Nome do cliente é obrigatório';
+  end if;
+  if length(v_phone) < 10 then
+    raise exception 'Telefone inválido';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(v_phone));
+
+  select id into v_customer_id
+  from customers
+  where regexp_replace(coalesce(phone,''), '[^0-9]', '', 'g') = v_phone
+  order by id desc
+  limit 1;
+
+  if v_customer_id is null then
+    v_customer_id := floor(extract(epoch from clock_timestamp()) * 1000)::bigint;
+    insert into customers (id, name, phone, email, city, orders, spent, last_order, since)
+    values (
+      v_customer_id, trim(p_customer_name), trim(p_phone),
+      nullif(trim(coalesce(p_email,'')),''),
+      trim(coalesce(p_city,'')), 0, 0, '—', v_now
+    );
+  else
+    update customers
+       set name = trim(p_customer_name),
+           phone = trim(p_phone),
+           email = coalesce(nullif(trim(coalesce(p_email,'')),''), email),
+           city = coalesce(nullif(trim(coalesce(p_city,'')),''), city)
+     where id = v_customer_id;
+  end if;
+
+  return jsonb_build_object('customer_id', v_customer_id);
+exception
+  when unique_violation then
+    raise exception 'Não foi possível registrar o cliente. Tente novamente.';
+end;
+$$;
+
+revoke all on function public.save_public_customer(text,text,text,text) from public;
+grant execute on function public.save_public_customer(text,text,text,text) to anon, authenticated;
+
+
 create or replace function public.create_public_order(
   p_order_id text,
   p_customer_name text,

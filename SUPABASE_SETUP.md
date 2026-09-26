@@ -6,6 +6,7 @@ No Supabase, abra **SQL Editor > New query**, cole o conteúdo completo de `supa
 O script cria/atualiza:
 - catálogo de produtos com `image_url`;
 - clientes sem restrição indevida por nome repetido;
+- clientes registrados assim que nome e telefone são preenchidos no site;
 - pedidos públicos registrados de forma controlada;
 - reserva/baixa de estoque e devolução automática quando um pedido é cancelado;
 - funções RPC usadas pelo site e pelo painel.
@@ -47,3 +48,9 @@ WhatsApp com número do pedido
 ## 5. Frete
 - Floriano/PI: **R$ 3,00**
 - Barão de Grajaú/MA: **R$ 4,00**
+
+
+## 6. Cadastro automático de clientes
+Ao preencher **Nome completo** e **Telefone/WhatsApp** na aba **Cliente**, o site chama `save_public_customer()` e cria ou atualiza o cadastro em `customers`. O cliente não precisa concluir o pedido para aparecer no painel. O telefone é usado para localizar o cadastro existente e evitar duplicação.
+
+Ao finalizar o pedido, `create_public_order()` continua vinculando o pedido ao mesmo `customer_id` e atualizando pedidos, total gasto e último pedido.

@@ -155,7 +155,6 @@ function calcFrete(cidade: string, uf: string): number {
   if (key === "barao de grajau" && estado === "MA") return 8.00;
   return -1;
 }
-
 const WA = "5589994112439";
 const PIX_KEY = "ludmyla.emille1412@gmail.com";
 const wa = (msg = "Olá!\nGostaria de fazer um pedido na BC Bom Feito Confeitaria.") =>
@@ -269,6 +268,7 @@ function MainSite() {
   const [cartOpen, setCartOpen]             = useState(false);
   const [cartTab, setCartTab]               = useState<"itens"|"cliente"|"frete">("itens");
   const [customerInfo, setCustomerInfo]     = useState({ nome: "", telefone: "", observacao: "" });
+  const [customerSaved, setCustomerSaved]   = useState(false);
   const [deliveryType, setDeliveryType]     = useState<"retirada"|"entrega">("entrega");
   const [cep, setCep]                       = useState("");
   const [cepLoading, setCepLoading]         = useState(false);
@@ -289,6 +289,38 @@ function MainSite() {
   const [newReview, setNewReview]           = useState({ name: "", rating: 5, comment: "" });
   const [reviewDone, setReviewDone]         = useState(false);
   const [hoverStar, setHoverStar]           = useState(0);
+
+  useEffect(() => {
+    const nome = customerInfo.nome.trim();
+    const telefone = customerInfo.telefone.trim();
+    const telefoneNumeros = telefone.replace(/\D/g, "");
+
+    // Assim que nome e telefone válidos forem preenchidos na aba Cliente,
+    // registra/atualiza o cliente no Supabase. O pedido continua sendo salvo
+    // normalmente pela RPC create_public_order ao finalizar.
+    if (nome.length < 2 || telefoneNumeros.length < 10) {
+      setCustomerSaved(false);
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      const { error } = await supabase.rpc("save_public_customer", {
+        p_customer_name: nome,
+        p_phone: telefone,
+        p_email: null,
+        p_city: address.cidade || "",
+      });
+
+      if (error) {
+        console.error("Erro ao registrar cliente:", error.message);
+        setCustomerSaved(false);
+        return;
+      }
+      setCustomerSaved(true);
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [customerInfo.nome, customerInfo.telefone, address.cidade]);
 
   useEffect(() => {
     const t = setInterval(() => setSloganIndex(i => (i + 1) % SLOGANS.length), 3800);
@@ -1031,7 +1063,7 @@ function MainSite() {
                   type="text"
                   placeholder="Ex.: João da Silva"
                   value={customerInfo.nome}
-                  onChange={e => setCustomerInfo(c => ({ ...c, nome: e.target.value }))}
+                  onChange={e => { setCustomerSaved(false); setCustomerInfo(c => ({ ...c, nome: e.target.value })); }}
                   className="w-full px-4 py-3 rounded-2xl border border-border bg-[#F9F0FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#C4B5FD] transition-all"
                 />
               </div>
@@ -1049,6 +1081,7 @@ function MainSite() {
                     if (v.length > 10) formatted = `(${v.slice(0,2)}) ${v.slice(2,7)}-${v.slice(7)}`;
                     else if (v.length > 6) formatted = `(${v.slice(0,2)}) ${v.slice(2,6)}-${v.slice(6)}`;
                     else if (v.length > 2) formatted = `(${v.slice(0,2)}) ${v.slice(2)}`;
+                    setCustomerSaved(false);
                     setCustomerInfo(c => ({ ...c, telefone: formatted }));
                   }}
                   className="w-full px-4 py-3 rounded-2xl border border-border bg-[#F9F0FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#C4B5FD] transition-all"
@@ -1069,9 +1102,16 @@ function MainSite() {
 
             <div className="bg-[#F3E8FF] rounded-2xl p-4 flex items-start gap-3">
               <Info size={18} className="text-[#9B5DE5] flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Seus dados serão enviados junto com o pedido pelo WhatsApp para facilitar a identificação e o atendimento.
-              </p>
+              <div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Seus dados serão enviados junto com o pedido pelo WhatsApp para facilitar a identificação e o atendimento.
+                </p>
+                {customerSaved && (
+                  <p className="text-xs text-green-600 font-bold mt-2 flex items-center gap-1">
+                    <CheckCircle size={13} /> Cliente registrado com sucesso.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}
