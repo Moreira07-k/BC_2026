@@ -50,6 +50,7 @@ interface Review {
   rating: number;
   comment: string;
   avatar: string;
+  response?: string;
 }
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
@@ -147,18 +148,34 @@ const FILTERS = [
   { key: "pote",         label: "No Pote" },
 ];
 
-function calcFrete(cidade: string, uf: string): number {
+function calcFrete(cidade: string, uf: string, freteFloriano = 3.00, freteBarao = 4.00): number {
   const key = cidade.trim().toLowerCase()
     .normalize("NFD").replace(/[̀-ͯ]/g, "");
   const estado = uf.trim().toUpperCase();
-  if (key === "floriano" && estado === "PI") return 5.00;
-  if (key === "barao de grajau" && estado === "MA") return 8.00;
+  if (key === "floriano" && estado === "PI") return freteFloriano;
+  if (key === "barao de grajau" && estado === "MA") return freteBarao;
   return -1;
 }
-const WA = "5589994112439";
-const PIX_KEY = "ludmyla.emille1412@gmail.com";
-const wa = (msg = "Olá!\nGostaria de fazer um pedido na BC Bom Feito Confeitaria.") =>
-  window.open(`https://wa.me/${WA}?text=${encodeURIComponent(msg)}`, "_blank");
+
+// Valores padrão: usados enquanto a tabela site_settings do Supabase ainda
+// não carregou (ou se estiver indisponível), preservando a identidade atual.
+const DEFAULT_SETTINGS = {
+  nome: "BC Bom Feito Confeitaria",
+  whatsapp: "5589994112439",
+  whatsappDisplay: "(89) 99411-2439",
+  instagram: "bcconfeitaria_doces",
+  email: "emillesilva879@gmail.com",
+  horario: "Qua – Dom · 14h às 20h",
+  pixKey: "ludmyla.emille1412@gmail.com",
+  freteFloriano: 3.00,
+  freteBarao: 4.00,
+  slogans: SLOGANS as string[],
+};
+
+const WA = DEFAULT_SETTINGS.whatsapp;
+const PIX_KEY = DEFAULT_SETTINGS.pixKey;
+const wa = (msg = "Olá!\nGostaria de fazer um pedido na BC Bom Feito Confeitaria.", number = WA) =>
+  window.open(`https://wa.me/${number}?text=${encodeURIComponent(msg)}`, "_blank");
 
 const fmt = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -268,7 +285,6 @@ function MainSite() {
   const [cartOpen, setCartOpen]             = useState(false);
   const [cartTab, setCartTab]               = useState<"itens"|"cliente"|"frete">("itens");
   const [customerInfo, setCustomerInfo]     = useState({ nome: "", telefone: "", observacao: "" });
-  const [customerSaved, setCustomerSaved]   = useState(false);
   const [deliveryType, setDeliveryType]     = useState<"retirada"|"entrega">("entrega");
   const [cep, setCep]                       = useState("");
   const [cepLoading, setCepLoading]         = useState(false);
@@ -289,42 +305,45 @@ function MainSite() {
   const [newReview, setNewReview]           = useState({ name: "", rating: 5, comment: "" });
   const [reviewDone, setReviewDone]         = useState(false);
   const [hoverStar, setHoverStar]           = useState(0);
+  const [settings, setSettings]             = useState(DEFAULT_SETTINGS);
+  const [galleryItems, setGalleryItems]     = useState<{ id: number; src: string; alt: string; cls: string }[] | null>(null);
 
   useEffect(() => {
-    const nome = customerInfo.nome.trim();
-    const telefone = customerInfo.telefone.trim();
-    const telefoneNumeros = telefone.replace(/\D/g, "");
-
-    // Assim que nome e telefone válidos forem preenchidos na aba Cliente,
-    // registra/atualiza o cliente no Supabase. O pedido continua sendo salvo
-    // normalmente pela RPC create_public_order ao finalizar.
-    if (nome.length < 2 || telefoneNumeros.length < 10) {
-      setCustomerSaved(false);
-      return;
-    }
-
-    const timer = window.setTimeout(async () => {
-      const { error } = await supabase.rpc("save_public_customer", {
-        p_customer_name: nome,
-        p_phone: telefone,
-        p_email: null,
-        p_city: address.cidade || "",
-      });
-
-      if (error) {
-        console.error("Erro ao registrar cliente:", error.message);
-        setCustomerSaved(false);
-        return;
-      }
-      setCustomerSaved(true);
-    }, 700);
-
-    return () => window.clearTimeout(timer);
-  }, [customerInfo.nome, customerInfo.telefone, address.cidade]);
-
-  useEffect(() => {
-    const t = setInterval(() => setSloganIndex(i => (i + 1) % SLOGANS.length), 3800);
+    const t = setInterval(() => setSloganIndex(i => (i + 1) % settings.slogans.length), 3800);
     return () => clearInterval(t);
+  }, [settings.slogans.length]);
+
+  // Configurações da loja (WhatsApp, PIX, Instagram, horário, fretes, slogans)
+  // vêm do Supabase e refletem o que a admin altera em Configurações — os
+  // valores padrão acima servem só de fallback enquanto isso carrega.
+  useEffect(() => {
+    supabase.from("site_settings").select("*").eq("id", 1).maybeSingle().then(({ data, error }) => {
+      if (error || !data) return;
+      setSettings({
+        nome: data.nome || DEFAULT_SETTINGS.nome,
+        whatsapp: (data.whatsapp || "").replace(/\D/g, "") || DEFAULT_SETTINGS.whatsapp,
+        whatsappDisplay: data.whatsapp || DEFAULT_SETTINGS.whatsappDisplay,
+        instagram: (data.instagram || DEFAULT_SETTINGS.instagram).replace(/^@/, ""),
+        email: data.email || DEFAULT_SETTINGS.email,
+        horario: data.horario || DEFAULT_SETTINGS.horario,
+        pixKey: data.pix_key || DEFAULT_SETTINGS.pixKey,
+        freteFloriano: Number(data.frete_floriano ?? DEFAULT_SETTINGS.freteFloriano),
+        freteBarao: Number(data.frete_barao ?? DEFAULT_SETTINGS.freteBarao),
+        slogans: (data.slogans && data.slogans.length) ? data.slogans : DEFAULT_SETTINGS.slogans,
+      });
+    });
+  }, []);
+
+  // Galeria pública: usa o que a admin cadastrou no Supabase Storage; se
+  // ainda não houver nada cadastrado, mantém as fotos locais de sempre.
+  useEffect(() => {
+    supabase.from("gallery_items").select("*").order("id").then(({ data, error }) => {
+      if (error || !data?.length) return;
+      setGalleryItems(data.map((g: any, i: number) => ({
+        id: g.id, src: g.url, alt: g.name || "Foto da confeitaria",
+        cls: GALLERY_ITEMS[i]?.cls || "",
+      })));
+    });
   }, []);
 
   // Avaliações de verdade, vindas do Supabase — só as já aprovadas no painel
@@ -339,6 +358,7 @@ function MainSite() {
         setReviews((data || []).map((r: any) => ({
           id: r.id, name: r.name, rating: r.rating, comment: r.comment ?? "",
           avatar: (r.name?.[0] || "?").toUpperCase(),
+          response: r.response ?? undefined,
         })));
       });
   }, []);
@@ -404,7 +424,7 @@ function MainSite() {
 
   const cartSubtotal = cartItems.reduce((s, i) => s + i.price * i.qty, 0);
   const freteValue   = deliveryType === "retirada" ? 0
-    : address.cidade ? calcFrete(address.cidade, address.uf)
+    : address.cidade ? calcFrete(address.cidade, address.uf, settings.freteFloriano, settings.freteBarao)
     : null;
   const cartTotal    = cartSubtotal + (freteValue !== null && freteValue >= 0 ? freteValue : 0);
 
@@ -413,7 +433,7 @@ function MainSite() {
   useEffect(() => {
     if (paymentMethod !== "pix") return;
     const payload = buildPixPayload({
-      key: PIX_KEY,
+      key: settings.pixKey,
       name: "BC Bom Feito",
       city: "Floriano",
       amount: totalConhecido ? cartTotal : undefined,
@@ -421,7 +441,7 @@ function MainSite() {
     QRCode.toDataURL(payload, { width: 220, margin: 1 })
       .then(setPixQrDataUrl)
       .catch(() => setPixQrDataUrl(""));
-  }, [paymentMethod, cartTotal, totalConhecido]);
+  }, [paymentMethod, cartTotal, totalConhecido, settings.pixKey]);
 
   const fetchCep = async (raw: string) => {
     const digits = raw.replace(/\D/g, "");
@@ -578,7 +598,7 @@ function MainSite() {
               transition={{ duration: 0.6 }}
               className="text-2xl md:text-3xl text-foreground/80 font-semibold"
               style={{ fontFamily: "'Caveat', cursive" }}>
-              "{SLOGANS[sloganIndex]}"
+              "{settings.slogans[sloganIndex % settings.slogans.length]}"
             </motion.p>
           </div>
 
@@ -694,7 +714,7 @@ function MainSite() {
           </motion.div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 auto-rows-[180px]">
-            {GALLERY_ITEMS.map((img, i) => (
+            {(galleryItems || GALLERY_ITEMS).map((img, i) => (
               <motion.div key={img.id}
                 initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }} transition={{ delay: i * 0.07 }} whileHover={{ scale: 1.02 }}
@@ -706,9 +726,9 @@ function MainSite() {
 
           <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             className="text-center mt-10">
-            <a href="https://www.instagram.com/bcconfeitaria_doces" target="_blank" rel="noreferrer"
+            <a href={`https://www.instagram.com/${settings.instagram}`} target="_blank" rel="noreferrer"
               className="inline-flex items-center gap-2 border border-border bg-card text-foreground px-6 py-3 rounded-2xl text-sm font-bold hover:bg-secondary transition-colors shadow-sm">
-              <Instagram size={16} className="text-[#F15BB5]" /> Ver mais no Instagram @bcconfeitaria_doces
+              <Instagram size={16} className="text-[#F15BB5]" /> Ver mais no Instagram @{settings.instagram}
             </a>
           </motion.div>
         </div>
@@ -769,6 +789,14 @@ function MainSite() {
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground leading-relaxed italic">"{r.comment}"</p>
+                  {r.response && (
+                    <div className="mt-4 bg-[#9B5DE5]/5 border border-[#9B5DE5]/15 rounded-2xl p-4">
+                      <p className="text-[10px] font-bold text-[#9B5DE5] uppercase tracking-wider mb-1">
+                        Resposta da Loja
+                      </p>
+                      <p className="text-sm text-foreground/80 leading-relaxed">{r.response}</p>
+                    </div>
+                  )}
                 </motion.div>
               ))}
             </div>
@@ -835,8 +863,8 @@ function MainSite() {
                     className="w-full px-4 py-3 rounded-2xl border border-border bg-[#F9F0FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#C4B5FD] resize-none transition-all" />
 
                   <p className="text-xs text-muted-foreground text-center -mt-2">
-                    Dúvidas? Entre em contato: <a href="mailto:emillesilva879@gmail.com"
-                      className="text-[#9B5DE5] font-bold hover:underline">emillesilva879@gmail.com</a>
+                    Dúvidas? Entre em contato: <a href={`mailto:${settings.email}`}
+                      className="text-[#9B5DE5] font-bold hover:underline">{settings.email}</a>
                   </p>
 
                   <button onClick={submitReview}
@@ -864,19 +892,19 @@ function MainSite() {
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             <motion.button initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-              whileHover={{ y: -4 }} onClick={() => wa()}
+              whileHover={{ y: -4 }} onClick={() => wa(undefined, settings.whatsapp)}
               className="bg-gradient-to-br from-[#25D366] to-[#128C7E] text-white rounded-3xl p-6 text-left shadow-lg shadow-green-500/20 flex flex-col gap-3">
               <div className="w-11 h-11 bg-white/20 rounded-2xl flex items-center justify-center">
                 <MessageCircle size={22} />
               </div>
               <div>
                 <p className="font-black text-base" style={{ fontFamily: "'Fredoka', sans-serif" }}>WhatsApp</p>
-                <p className="text-white/80 text-xs mt-0.5">(89) 99411-2439</p>
+                <p className="text-white/80 text-xs mt-0.5">{settings.whatsappDisplay}</p>
               </div>
               <span className="text-xs bg-white/20 rounded-full px-3 py-1 w-fit font-bold">Fazer Pedido</span>
             </motion.button>
 
-            <motion.a href="https://www.instagram.com/bcconfeitaria_doces" target="_blank" rel="noreferrer"
+            <motion.a href={`https://www.instagram.com/${settings.instagram}`} target="_blank" rel="noreferrer"
               initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
               transition={{ delay: 0.08 }} whileHover={{ y: -4 }}
               className="bg-gradient-to-br from-[#E1306C] via-[#833AB4] to-[#FD1D1D] text-white rounded-3xl p-6 flex flex-col gap-3 shadow-lg shadow-pink-500/20">
@@ -885,12 +913,12 @@ function MainSite() {
               </div>
               <div>
                 <p className="font-black text-base" style={{ fontFamily: "'Fredoka', sans-serif" }}>Instagram</p>
-                <p className="text-white/80 text-xs mt-0.5">@bcconfeitaria_doces</p>
+                <p className="text-white/80 text-xs mt-0.5">@{settings.instagram}</p>
               </div>
               <span className="text-xs bg-white/20 rounded-full px-3 py-1 w-fit font-bold">Seguir</span>
             </motion.a>
 
-            <motion.a href="mailto:emillesilva879@gmail.com"
+            <motion.a href={`mailto:${settings.email}`}
               initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
               transition={{ delay: 0.16 }} whileHover={{ y: -4 }}
               className="bg-gradient-to-br from-[#9B5DE5] to-[#7C3AED] text-white rounded-3xl p-6 flex flex-col gap-3 shadow-lg shadow-purple-500/20">
@@ -899,7 +927,7 @@ function MainSite() {
               </div>
               <div>
                 <p className="font-black text-base" style={{ fontFamily: "'Fredoka', sans-serif" }}>E-mail</p>
-                <p className="text-white/80 text-xs mt-0.5 break-all">emillesilva879@gmail.com</p>
+                <p className="text-white/80 text-xs mt-0.5 break-all">{settings.email}</p>
               </div>
               <span className="text-xs bg-white/20 rounded-full px-3 py-1 w-fit font-bold">Enviar mensagem</span>
             </motion.a>
@@ -912,8 +940,7 @@ function MainSite() {
               </div>
               <div>
                 <p className="font-black text-base text-foreground" style={{ fontFamily: "'Fredoka', sans-serif" }}>Horário</p>
-                <p className="text-muted-foreground text-xs mt-1">Quarta a Domingo</p>
-                <p className="text-[#9B5DE5] font-black mt-0.5">14h – 20h</p>
+                <p className="text-[#9B5DE5] font-black mt-0.5">{settings.horario}</p>
               </div>
               <p className="text-xs text-muted-foreground">Pedidos fora do horário pelo WhatsApp</p>
             </motion.div>
@@ -938,15 +965,15 @@ function MainSite() {
               ))}
             </div>
             <div className="flex gap-3">
-              <a href="https://www.instagram.com/bcconfeitaria_doces" target="_blank" rel="noreferrer"
+              <a href={`https://www.instagram.com/${settings.instagram}`} target="_blank" rel="noreferrer"
                 className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-[#F15BB5] transition-colors">
                 <Instagram size={16} />
               </a>
-              <button onClick={() => wa()}
+              <button onClick={() => wa(undefined, settings.whatsapp)}
                 className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-[#25D366] transition-colors">
                 <Phone size={16} />
               </button>
-              <a href="mailto:emillesilva879@gmail.com"
+              <a href={`mailto:${settings.email}`}
                 className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-[#9B5DE5] transition-colors">
                 <Mail size={16} />
               </a>
@@ -1063,7 +1090,7 @@ function MainSite() {
                   type="text"
                   placeholder="Ex.: João da Silva"
                   value={customerInfo.nome}
-                  onChange={e => { setCustomerSaved(false); setCustomerInfo(c => ({ ...c, nome: e.target.value })); }}
+                  onChange={e => setCustomerInfo(c => ({ ...c, nome: e.target.value }))}
                   className="w-full px-4 py-3 rounded-2xl border border-border bg-[#F9F0FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#C4B5FD] transition-all"
                 />
               </div>
@@ -1081,7 +1108,6 @@ function MainSite() {
                     if (v.length > 10) formatted = `(${v.slice(0,2)}) ${v.slice(2,7)}-${v.slice(7)}`;
                     else if (v.length > 6) formatted = `(${v.slice(0,2)}) ${v.slice(2,6)}-${v.slice(6)}`;
                     else if (v.length > 2) formatted = `(${v.slice(0,2)}) ${v.slice(2)}`;
-                    setCustomerSaved(false);
                     setCustomerInfo(c => ({ ...c, telefone: formatted }));
                   }}
                   className="w-full px-4 py-3 rounded-2xl border border-border bg-[#F9F0FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#C4B5FD] transition-all"
@@ -1102,16 +1128,9 @@ function MainSite() {
 
             <div className="bg-[#F3E8FF] rounded-2xl p-4 flex items-start gap-3">
               <Info size={18} className="text-[#9B5DE5] flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Seus dados serão enviados junto com o pedido pelo WhatsApp para facilitar a identificação e o atendimento.
-                </p>
-                {customerSaved && (
-                  <p className="text-xs text-green-600 font-bold mt-2 flex items-center gap-1">
-                    <CheckCircle size={13} /> Cliente registrado com sucesso.
-                  </p>
-                )}
-              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Seus dados serão enviados junto com o pedido pelo WhatsApp para facilitar a identificação e o atendimento.
+              </p>
             </div>
           </div>
         )}
@@ -1222,7 +1241,7 @@ function MainSite() {
                     </span>
                     {freteValue !== null && freteValue >= 0
                       ? <span className="font-black">{fmt(freteValue)}</span>
-                      : <button onClick={() => wa(`Olá! Gostaria de consultar frete para ${address.cidade} – ${address.uf}.`)}
+                      : <button onClick={() => wa(`Olá! Gostaria de consultar frete para ${address.cidade} – ${address.uf}.`, settings.whatsapp)}
                           className="inline-flex items-center gap-1 bg-[#25D366] text-white text-xs font-bold px-3 py-1.5 rounded-xl hover:bg-[#128C7E] transition-colors">
                           <MessageCircle size={12} /> WhatsApp
                         </button>
@@ -1307,9 +1326,9 @@ function MainSite() {
                   )}
                   <p className="text-xs text-muted-foreground">Escaneie com o app do seu banco{totalConhecido ? ` — valor: ${fmt(cartTotal)}` : ""}</p>
                   <button
-                    onClick={() => { navigator.clipboard.writeText(PIX_KEY); setPixCopiado(true); setTimeout(() => setPixCopiado(false), 2000); }}
+                    onClick={() => { navigator.clipboard.writeText(settings.pixKey); setPixCopiado(true); setTimeout(() => setPixCopiado(false), 2000); }}
                     className="w-full flex items-center justify-center gap-2 bg-white border border-border rounded-xl px-3 py-2.5 text-xs font-semibold text-foreground hover:border-[#C4B5FD] transition-all">
-                    <Copy size={13} /> {pixCopiado ? "Chave copiada!" : PIX_KEY}
+                    <Copy size={13} /> {pixCopiado ? "Chave copiada!" : settings.pixKey}
                   </button>
                   <p className="text-xs font-bold text-[#9B5DE5]">📩 Envie o comprovante aqui pelo WhatsApp após pagar!</p>
                 </motion.div>
@@ -1373,7 +1392,7 @@ function MainSite() {
                     : paymentMethod === "cartao"
                       ? "\n💳 Pagamento: Cartão (favor levar a maquininha)"
                       : paymentMethod === "pix"
-                        ? `\n📱 Pagamento: Pix (chave: ${PIX_KEY}) — comprovante será enviado aqui`
+                        ? `\n📱 Pagamento: Pix (chave: ${settings.pixKey}) — comprovante será enviado aqui`
                         : "";
                 const now = new Date();
                 const orderId = `PED-${now.getTime()}`;
@@ -1398,14 +1417,9 @@ function MainSite() {
                 });
                 if (orderError) {
                   console.error("Erro ao registrar pedido:", orderError.message);
-                  alert(
-                    "Não foi possível registrar seu pedido agora. Por favor, tente novamente em instantes.\n\n" +
-                    "Se o problema continuar, entre em contato pelo WhatsApp: " + WA + "\n\n" +
-                    "Detalhe técnico: " + orderError.message
-                  );
                   return;
                 }
-                wa(`Olá! Gostaria de fazer um pedido:\n\n${clienteStr}\n\n${lines}${entregaStr}${totalStr}${pagamentoStr}\n🧾 Pedido: ${orderId}\n\nBC Bom Feito Confeitaria`);
+                wa(`Olá! Gostaria de fazer um pedido:\n\n${clienteStr}\n\n${lines}${entregaStr}${totalStr}${pagamentoStr}\n🧾 Pedido: ${orderId}\n\nBC Bom Feito Confeitaria`, settings.whatsapp);
               }}
               className="w-full bg-gradient-to-r from-[#9B5DE5] to-[#7C3AED] text-white font-bold py-3.5 rounded-2xl hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-sm">
               <MessageCircle size={16} /> Finalizar pelo WhatsApp
@@ -1427,7 +1441,7 @@ function MainSite() {
 
       {/* ── WHATSAPP FAB ─────────────────────────────────────────────────────── */}
       <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 1.5 }}
-        whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => wa()}
+        whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => wa(undefined, settings.whatsapp)}
         className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-[#25D366] text-white rounded-full shadow-lg shadow-green-500/40 flex items-center justify-center">
         <MessageCircle size={24} fill="white" />
       </motion.button>

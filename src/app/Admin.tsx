@@ -23,12 +23,17 @@ interface AdminProduct {
 interface OrderProduct { productId?: number; name: string; qty: number; price: number; }
 type OrderStatus = "novo" | "confirmado" | "preparo" | "pronto" | "entrega" | "entregue" | "cancelado";
 
+type PaymentStatus = "pendente" | "pago";
+
 interface AdminOrder {
   id: string; customerId: number | null; customer: string; phone: string; products: OrderProduct[];
   address: string; city: string; deliveryType: "entrega" | "retirada";
   payment: string; frete: number; subtotal: number; total: number;
   status: OrderStatus; date: string; time: string; notes: string;
+  paymentStatus: PaymentStatus;
 }
+
+interface OrderStatusLogEntry { status: OrderStatus; paymentStatus: PaymentStatus | null; changedAt: string; }
 
 interface AdminCustomer {
   id: number; name: string; phone: string; email: string;
@@ -151,12 +156,14 @@ const orderFromDb = (r: any): AdminOrder => ({
   deliveryType: r.delivery_type, payment: r.payment, frete: Number(r.frete ?? 0),
   subtotal: Number(r.subtotal ?? 0), total: Number(r.total ?? 0), status: r.status,
   date: r.date, time: r.time, notes: r.notes ?? "",
+  paymentStatus: (r.payment_status === "pago" ? "pago" : "pendente"),
 });
 const orderToDb = (o: AdminOrder) => ({
   id: o.id, customer_id: o.customerId, customer: o.customer, phone: o.phone,
   products: o.products, address: o.address, city: o.city, delivery_type: o.deliveryType,
   payment: o.payment, frete: o.frete, subtotal: o.subtotal, total: o.total,
   status: o.status, date: o.date, time: o.time, notes: o.notes,
+  payment_status: o.paymentStatus,
 });
 
 const reviewFromDb = (r: any): AdminReview => ({
@@ -221,34 +228,17 @@ function useSupabaseTable<T extends { id: string | number }>(
     });
     const toDeleteIds = prev.filter(i => !nextMap.has(String(i.id))).map(i => i.id);
 
-    const errors: string[] = [];
-
     if (toInsert.length) {
       const { error } = await supabase.from(table).insert(toInsert.map(mapToDb));
-      if (error) errors.push(error.message);
+      if (error) setError(error.message);
     }
     for (const item of toUpdate) {
       const { error } = await supabase.from(table).update(mapToDb(item)).eq("id", item.id);
-      if (error) errors.push(error.message);
+      if (error) setError(error.message);
     }
     if (toDeleteIds.length) {
       const { error } = await supabase.from(table).delete().in("id", toDeleteIds);
-      if (error) errors.push(error.message);
-    }
-
-    if (errors.length) {
-      const message = errors.join(" | ");
-      setError(message);
-      // A gravação falhou de verdade: desfaz a mudança otimista na tela para
-      // não fingir que salvou, e avisa a pessoa com o motivo exato.
-      setItemsState(prev);
-      alert(
-        `Não foi possível salvar a alteração em "${table}". A tela vai voltar ao valor anterior.\n\n` +
-        `Detalhe técnico: ${message}\n\n` +
-        `Se isso continuar, faça login novamente ou verifique as permissões (RLS) da tabela "${table}" no Supabase.`
-      );
-    } else {
-      setError(null);
+      if (error) setError(error.message);
     }
   };
 
@@ -397,8 +387,25 @@ function Dashboard({ orders, products, customers, reviews }: {
   const chartData = buildWeekChartData(orders);
   const pieData   = buildProductSalesData(orders);
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayOrders   = orders.filter(o => o.date === todayStr);
+  const todayRevenue  = todayOrders.filter(o => o.status !== "cancelado").reduce((s, o) => s + o.total, 0);
+  const todayDelivered = todayOrders.filter(o => o.status === "entregue").length;
+  const todayPending   = todayOrders.filter(o => !["entregue","cancelado"].includes(o.status)).length;
+  const lowStock = products.filter(p => p.active && p.stock <= 5).sort((a, b) => a.stock - b.stock);
+
   return (
     <div className="space-y-6">
+      <div>
+        <h3 className="font-black text-gray-900 mb-3" style={{ fontFamily: "'Fredoka',sans-serif" }}>Hoje</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard label="Faturamento Hoje" value={fmt(todayRevenue)}        sub="pedidos de hoje"     icon={DollarSign}  color="#22C55E" />
+          <StatCard label="Pedidos Hoje"     value={String(todayOrders.length)} sub="recebidos hoje"    icon={ShoppingBag} color="#9B5DE5" />
+          <StatCard label="Entregues Hoje"   value={String(todayDelivered)}   sub="finalizados"         icon={CheckCircle} color="#06B6D4" />
+          <StatCard label="Pendentes Hoje"   value={String(todayPending)}     sub="ainda em andamento"  icon={Clock}       color="#F15BB5" />
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total de Pedidos" value={String(orders.length)}    sub="no sistema"            icon={ShoppingBag} color="#9B5DE5" />
         <StatCard label="Pendentes"        value={String(pending.length)}   sub="aguardando ação"       icon={Clock}       color="#F15BB5" />
@@ -464,6 +471,26 @@ function Dashboard({ orders, products, customers, reviews }: {
         </div>
       </div>
 
+      <div className="bg-white rounded-3xl border border-[#E5E7EB] shadow-sm p-5">
+        <h3 className="font-black text-gray-900 mb-3 flex items-center gap-2" style={{ fontFamily: "'Fredoka',sans-serif" }}>
+          ⚠️ Estoque Baixo
+        </h3>
+        {lowStock.length === 0 ? (
+          <p className="text-sm text-gray-400">Nenhum produto com estoque baixo (5 ou menos) no momento.</p>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {lowStock.map(p => (
+              <div key={p.id} className={`rounded-2xl p-3 border ${p.stock === 0 ? "bg-red-50 border-red-100" : "bg-amber-50 border-amber-100"}`}>
+                <p className={`font-bold text-sm ${p.stock === 0 ? "text-red-700" : "text-amber-700"}`}>{p.name}</p>
+                <p className={`text-xs font-semibold ${p.stock === 0 ? "text-red-500" : "text-amber-600"}`}>
+                  {p.stock === 0 ? "Sem estoque" : `Estoque: ${p.stock}`}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="bg-white rounded-3xl border border-[#E5E7EB] shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-[#F3F4F6] flex items-center justify-between">
           <h3 className="font-black text-gray-900" style={{ fontFamily: "'Fredoka',sans-serif" }}>Últimos Pedidos</h3>
@@ -507,6 +534,18 @@ function ProdutosSection({ products, setProducts }: { products: AdminProduct[]; 
   const [layerIn, setLayerIn]   = useState("");
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [search, setSearch]     = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const uploadProductImage = async (file: File) => {
+    setUploadingImage(true);
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage.from("product-images").upload(path, file, { upsert: false });
+    if (error) { show("Não foi possível enviar a imagem: " + error.message); setUploadingImage(false); return; }
+    const { data: pub } = supabase.storage.from("product-images").getPublicUrl(path);
+    setModal(m => m ? { ...m, imageUrl: pub.publicUrl } : m);
+    setUploadingImage(false);
+  };
 
   const openNew  = () => { setModal({ id: Date.now(), ...EMPTY }); setIsNew(true); setLayerIn(""); };
   const openEdit = (p: AdminProduct) => { setModal({ ...p }); setIsNew(false); setLayerIn(""); };
@@ -639,8 +678,19 @@ function ProdutosSection({ products, setProducts }: { products: AdminProduct[]; 
                 </div>
               </div>
               <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Imagem do produto (URL)</label>
-                <input type="url" placeholder="https://..." value={modal.imageUrl}
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Imagem do produto</label>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-16 h-16 rounded-2xl bg-purple-50 overflow-hidden flex-shrink-0 border border-[#E5E7EB]">
+                    {modal.imageUrl
+                      ? <img src={modal.imageUrl} alt="preview" className="w-full h-full object-cover" />
+                      : <Package size={18} className="m-auto mt-6 text-[#C4B5FD]" />}
+                  </div>
+                  <input type="file" accept="image/*" disabled={uploadingImage}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadProductImage(f); }}
+                    className="flex-1 text-xs file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:font-bold file:bg-gradient-to-r file:from-[#9B5DE5] file:to-[#7C3AED] file:text-white file:cursor-pointer disabled:opacity-50" />
+                </div>
+                {uploadingImage && <p className="text-xs text-gray-400 mb-2">Enviando imagem...</p>}
+                <input type="url" placeholder="ou cole uma URL de imagem" value={modal.imageUrl}
                   onChange={e => setModal(m => m ? { ...m, imageUrl: e.target.value } : m)}
                   className="w-full px-4 py-2.5 rounded-2xl border border-[#E5E7EB] bg-[#F9F0FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#C4B5FD]" />
               </div>
@@ -720,6 +770,30 @@ function PedidosSection({ orders, setOrders, customers, setCustomers, products }
   const [search, setSearch]   = useState("");
   const [selected, setSelected] = useState<AdminOrder | null>(null);
   const [newModal, setNewModal] = useState(false);
+  const [history, setHistory] = useState<OrderStatusLogEntry[]>([]);
+
+  // Histórico de status/pagamento: gravado sozinho por um trigger no banco
+  // (order_status_log), então basta ler — nenhum código aqui precisa gravar nele.
+  useEffect(() => {
+    if (!selected) { setHistory([]); return; }
+    let active = true;
+    supabase.from("order_status_log").select("*").eq("order_id", selected.id)
+      .order("changed_at", { ascending: true })
+      .then(({ data, error }) => {
+        if (!active || error) return;
+        setHistory((data || []).map((h: any) => ({
+          status: h.status as OrderStatus, paymentStatus: (h.payment_status ?? null) as PaymentStatus | null,
+          changedAt: h.changed_at,
+        })));
+      });
+    return () => { active = false; };
+  }, [selected?.id]);
+
+  const togglePayment = (id: string) => {
+    setOrders(prev => prev.map(o => o.id === id ? { ...o, paymentStatus: o.paymentStatus === "pago" ? "pendente" : "pago" } : o));
+    setSelected(prev => prev && prev.id === id ? { ...prev, paymentStatus: prev.paymentStatus === "pago" ? "pendente" : "pago" } : prev);
+    show("Pagamento atualizado!");
+  };
 
   const updateStatus = async (id: string, status: OrderStatus) => {
     const current = orders.find(o => o.id === id);
@@ -797,7 +871,12 @@ function PedidosSection({ orders, setOrders, customers, setCustomers, products }
                       {o.deliveryType === "entrega" ? "🛵 Entrega" : "🏪 Retirada"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-400 text-xs">{o.payment}</td>
+                  <td className="px-4 py-3 text-gray-400 text-xs">
+                    {o.payment}
+                    <span className="ml-1.5" title={o.paymentStatus === "pago" ? "Pago" : "Pendente"}>
+                      {o.paymentStatus === "pago" ? "🟢" : "🟡"}
+                    </span>
+                  </td>
                   <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
                   <td className="px-4 py-3">
                     <button onClick={() => setSelected(o)} className="w-8 h-8 rounded-lg hover:bg-purple-50 text-[#9B5DE5] flex items-center justify-center transition-colors">
@@ -856,6 +935,23 @@ function PedidosSection({ orders, setOrders, customers, setCustomers, products }
                 <div className="bg-gray-50 rounded-2xl p-3"><p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Entrega</p><p className="font-bold">{selected.deliveryType === "entrega" ? "Motoboy" : "Retirada"}</p></div>
               </div>
 
+              <div className="flex items-center justify-between bg-gray-50 rounded-2xl p-3">
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Status do Pagamento</p>
+                  <p className={`font-bold flex items-center gap-1.5 ${selected.paymentStatus === "pago" ? "text-green-600" : "text-amber-600"}`}>
+                    {selected.paymentStatus === "pago" ? "🟢 Pago" : "🟡 Pendente"}
+                  </p>
+                </div>
+                <button onClick={() => togglePayment(selected.id)}
+                  className={`text-xs font-bold px-4 py-2 rounded-2xl transition-all ${
+                    selected.paymentStatus === "pago"
+                      ? "bg-white border border-[#E5E7EB] text-gray-500 hover:border-amber-300"
+                      : "bg-green-500 text-white hover:opacity-90"
+                  }`}>
+                  {selected.paymentStatus === "pago" ? "Marcar como pendente" : "Marcar como pago"}
+                </button>
+              </div>
+
               {selected.notes && (
                 <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 text-sm">
                   <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-1">Observações</p>
@@ -878,6 +974,24 @@ function PedidosSection({ orders, setOrders, customers, setCustomers, products }
                   </button>
                 </div>
               </div>
+
+              {history.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Histórico</p>
+                  <div className="space-y-2 border-l-2 border-[#F3E8FF] pl-4 ml-1">
+                    {history.map((h, i) => (
+                      <div key={i} className="relative text-xs">
+                        <span className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-[#9B5DE5]" />
+                        <p className="font-bold text-gray-700">
+                          {STATUS_CONFIG[h.status]?.label || h.status}
+                          {h.paymentStatus && <span className="text-gray-400 font-semibold"> · {h.paymentStatus === "pago" ? "pagamento recebido" : "pagamento pendente"}</span>}
+                        </p>
+                        <p className="text-gray-400">{new Date(h.changedAt).toLocaleString("pt-BR")}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
         </div>
@@ -944,7 +1058,7 @@ function NovoPedidoModal({ customers, products, onClose, onSave, nextId }: {
     const order: AdminOrder = {
       id: nextId, customerId: customer.id, customer: customer.name, phone: customer.phone,
       products: orderProducts, address, city: city || customer.city, deliveryType, payment,
-      frete: frete || 0, subtotal, total, status: "novo",
+      frete: frete || 0, subtotal, total, status: "novo", paymentStatus: "pendente",
       date: now.toISOString().slice(0, 10), time: now.toTimeString().slice(0, 5), notes,
     };
     onSave(order, customer.id);
@@ -1288,20 +1402,54 @@ function AvaliacoesSection({ reviews, setReviews }: { reviews: AdminReview[]; se
 }
 
 // ─── GALERIA ──────────────────────────────────────────────────────────────────
+interface GalleryItem { id: number; name: string; category: string; url: string; path: string; }
+
 function GaleriaSection() {
   const { msg, show } = useToast();
-  const [items, setItems] = useLocalStorage<{id:number;name:string;category:string;url:string}[]>("bc_gallery",[
-    { id:1, name:"Oreo",            category:"produto",   url:"https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400&q=80" },
-    { id:2, name:"Bombom Morango",  category:"produto",   url:"https://images.unsplash.com/photo-1488477181946-6428a0291777?w=400&q=80" },
-    { id:3, name:"Entrega",         category:"destaque",  url:"https://images.unsplash.com/photo-1549541671-30ae92a5f83e?w=400&q=80"  },
-  ]);
+  const [items, setItems] = useState<GalleryItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [name, setName]   = useState("");
   const [cat, setCat]     = useState("produto");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const add = () => {
-    if (!name.trim()) return;
-    setItems(prev => [...prev, { id: Date.now(), name, category: cat, url: `https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400&q=80&sig=${Date.now()}` }]);
-    setName(""); show("Imagem adicionada!");
+  const load = () => {
+    supabase.from("gallery_items").select("*").order("created_at", { ascending: false }).then(({ data, error }) => {
+      if (error) { show("Erro ao carregar galeria: " + error.message); setLoading(false); return; }
+      setItems((data || []).map((g: any) => ({
+        id: g.id, name: g.name, category: g.category,
+        url: g.url, path: g.url.split("/gallery/")[1] || "",
+      })));
+      setLoading(false);
+    });
+  };
+  useEffect(load, []);
+
+  const handleFile = async (file: File) => {
+    if (!name.trim()) { show("Dê um nome para a imagem antes de escolher o arquivo."); return; }
+    setUploading(true);
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("gallery").upload(path, file, { upsert: false });
+    if (upErr) { show("Não foi possível enviar a imagem: " + upErr.message); setUploading(false); return; }
+    const { data: pub } = supabase.storage.from("gallery").getPublicUrl(path);
+    const id = Date.now();
+    const { error: insErr } = await supabase.from("gallery_items").insert({
+      id, name: name.trim(), category: cat, url: pub.publicUrl,
+    });
+    if (insErr) { show("Não foi possível salvar a imagem: " + insErr.message); setUploading(false); return; }
+    setItems(prev => [{ id, name: name.trim(), category: cat, url: pub.publicUrl, path }, ...prev]);
+    setName(""); setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    show("Imagem adicionada!");
+  };
+
+  const remove = async (item: GalleryItem) => {
+    const { error } = await supabase.from("gallery_items").delete().eq("id", item.id);
+    if (error) { show("Não foi possível remover: " + error.message); return; }
+    if (item.path) await supabase.storage.from("gallery").remove([item.path]);
+    setItems(prev => prev.filter(i => i.id !== item.id));
+    show("Removida!");
   };
 
   return (
@@ -1316,50 +1464,69 @@ function GaleriaSection() {
             className="px-4 py-2.5 rounded-2xl border border-[#E5E7EB] bg-[#F9F0FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#C4B5FD]">
             {["produto","destaque","evento","outro"].map(c=><option key={c} value={c} className="capitalize">{c}</option>)}
           </select>
-          <button onClick={add} className="flex items-center gap-2 bg-gradient-to-r from-[#9B5DE5] to-[#7C3AED] text-white font-bold px-5 py-2.5 rounded-2xl hover:opacity-90 transition-all text-sm whitespace-nowrap">
-            <Plus size={14}/> Adicionar
-          </button>
+          <input ref={fileInputRef} type="file" accept="image/*" disabled={uploading}
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+            className="flex-1 text-sm file:mr-3 file:py-2.5 file:px-4 file:rounded-2xl file:border-0 file:font-bold file:bg-gradient-to-r file:from-[#9B5DE5] file:to-[#7C3AED] file:text-white file:cursor-pointer disabled:opacity-50" />
         </div>
-        <p className="text-xs text-gray-400 mt-3">Em produção: integrar Supabase Storage para upload real de arquivos (por enquanto os itens ficam salvos só neste navegador).</p>
+        <p className="text-xs text-gray-400 mt-3">{uploading ? "Enviando imagem..." : "A imagem é enviada direto para o Supabase Storage e aparece no site assim que salva."}</p>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-        {items.map(item => (
-          <div key={item.id} className="bg-white rounded-3xl border border-[#E5E7EB] shadow-sm overflow-hidden group">
-            <div className="relative h-36 bg-purple-50">
-              <img src={item.url} alt={item.name} className="w-full h-full object-cover"
-                onError={e => { (e.target as HTMLImageElement).style.opacity="0"; }} />
-              <button onClick={() => { setItems(p=>p.filter(i=>i.id!==item.id)); show("Removida!"); }}
-                className="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow">
-                <X size={12}/>
-              </button>
+      {loading ? (
+        <p className="text-center text-gray-400 text-sm py-8">Carregando...</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {items.map(item => (
+            <div key={item.id} className="bg-white rounded-3xl border border-[#E5E7EB] shadow-sm overflow-hidden group">
+              <div className="relative h-36 bg-purple-50">
+                <img src={item.url} alt={item.name} className="w-full h-full object-cover"
+                  onError={e => { (e.target as HTMLImageElement).style.opacity="0"; }} />
+                <button onClick={() => remove(item)}
+                  className="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow">
+                  <X size={12}/>
+                </button>
+              </div>
+              <div className="p-3">
+                <p className="font-bold text-sm text-gray-900 truncate">{item.name}</p>
+                <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-semibold capitalize">{item.category}</span>
+              </div>
             </div>
-            <div className="p-3">
-              <p className="font-bold text-sm text-gray-900 truncate">{item.name}</p>
-              <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-semibold capitalize">{item.category}</span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+          {items.length === 0 && (
+            <p className="col-span-full text-center text-gray-400 text-sm py-8">Nenhuma imagem cadastrada ainda.</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── CONFIGURAÇÕES ────────────────────────────────────────────────────────────
+const brToNum = (s: string) => { const n = parseFloat(String(s).replace(",", ".")); return Number.isFinite(n) ? n : 0; };
+const numToBr = (n: number) => n.toFixed(2).replace(".", ",");
+
 function ConfigSection() {
   const { msg, show } = useToast();
-  const [cfg, setCfg] = useLocalStorage("bc_config", {
-    nome:    "BC Bom Feito Confeitaria",
-    wa:      "(89) 99411-2439",
-    ig:      "@bcconfeitaria_doces",
-    email:   "emillesilva879@gmail.com",
-    horario: "Qua – Dom · 14h às 20h",
-    pix:     "ludmyla.emille1412@gmail.com",
-    freteFL: "3,00",
-    freteBG: "4,00",
-    sl1:     "Feito com carinho, servido em cada colher.",
-    sl2:     "Transformando momentos em doces lembranças.",
-    sl3:     "O sabor que abraça o coração.",
+  const [cfg, setCfg] = useState({
+    nome: "", wa: "", ig: "", email: "", horario: "", pix: "",
+    freteFL: "0,00", freteBG: "0,00", sl1: "", sl2: "", sl3: "",
   });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    supabase.from("site_settings").select("*").eq("id", 1).maybeSingle().then(({ data, error }) => {
+      if (error) { show("Erro ao carregar configurações: " + error.message); setLoading(false); return; }
+      if (data) {
+        const slogans = data.slogans || [];
+        setCfg({
+          nome: data.nome || "", wa: data.whatsapp || "", ig: data.instagram ? `@${data.instagram.replace(/^@/, "")}` : "",
+          email: data.email || "", horario: data.horario || "", pix: data.pix_key || "",
+          freteFL: numToBr(Number(data.frete_floriano ?? 0)), freteBG: numToBr(Number(data.frete_barao ?? 0)),
+          sl1: slogans[0] || "", sl2: slogans[1] || "", sl3: slogans[2] || "",
+        });
+      }
+      setLoading(false);
+    });
+  }, []);
 
   const FIELDS = [
     { section:"Informações da Loja",       keys:[["nome","Nome da Confeitaria"],["horario","Horário de Funcionamento"],["email","E-mail"]] },
@@ -1368,6 +1535,21 @@ function ConfigSection() {
     { section:"Fretes Fixos (R$)",         keys:[["freteFL","Floriano – PI"],["freteBG","Barão de Grajaú – MA"]] },
     { section:"Slogans do Site",            keys:[["sl1","Slogan 1"],["sl2","Slogan 2"],["sl3","Slogan 3"]] },
   ];
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase.from("site_settings").update({
+      nome: cfg.nome, whatsapp: cfg.wa, instagram: cfg.ig.replace(/^@/, ""), email: cfg.email,
+      horario: cfg.horario, pix_key: cfg.pix,
+      frete_floriano: brToNum(cfg.freteFL), frete_barao: brToNum(cfg.freteBG),
+      slogans: [cfg.sl1, cfg.sl2, cfg.sl3].filter(s => s.trim()),
+    }).eq("id", 1);
+    setSaving(false);
+    if (error) { show("Não foi possível salvar: " + error.message); return; }
+    show("Configurações salvas! O site público já reflete a mudança.");
+  };
+
+  if (loading) return <p className="text-center text-gray-400 text-sm py-8">Carregando...</p>;
 
   return (
     <div className="space-y-5 max-w-2xl">
@@ -1387,11 +1569,11 @@ function ConfigSection() {
           </div>
         </div>
       ))}
-      <button onClick={() => show("Configurações salvas!")}
-        className="w-full bg-gradient-to-r from-[#9B5DE5] to-[#7C3AED] text-white font-bold py-3.5 rounded-2xl hover:opacity-90 transition-all shadow-sm flex items-center justify-center gap-2 text-sm">
-        <CheckCircle size={15}/> Salvar Configurações
+      <button onClick={save} disabled={saving}
+        className="w-full bg-gradient-to-r from-[#9B5DE5] to-[#7C3AED] text-white font-bold py-3.5 rounded-2xl hover:opacity-90 disabled:opacity-50 transition-all shadow-sm flex items-center justify-center gap-2 text-sm">
+        <CheckCircle size={15}/> {saving ? "Salvando..." : "Salvar Configurações"}
       </button>
-      <p className="text-xs text-gray-400 text-center">Produtos, pedidos, clientes e avaliações já são salvos no Supabase. Estas configurações gerais ainda ficam só neste navegador.</p>
+      <p className="text-xs text-gray-400 text-center">Tudo aqui é salvo no Supabase (tabela site_settings) e o site público carrega automaticamente na próxima visita.</p>
     </div>
   );
 }

@@ -117,66 +117,6 @@ alter table customers drop constraint if exists customers_name_key;
 -- O site público registra pedidos por uma única função controlada. Assim,
 -- clientes e pedidos continuam protegidos por RLS e o navegador não precisa
 -- receber permissão de leitura desses dados sensíveis.
--- Registra/atualiza o cliente assim que ele preenche nome e telefone no site.
-create or replace function public.save_public_customer(
-  p_customer_name text,
-  p_phone text,
-  p_email text default null,
-  p_city text default ''
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_customer_id bigint;
-  v_phone text := regexp_replace(coalesce(p_phone,''), '[^0-9]', '', 'g');
-  v_now text := current_date::text;
-begin
-  if coalesce(length(trim(p_customer_name)), 0) < 2 then
-    raise exception 'Nome do cliente é obrigatório';
-  end if;
-  if length(v_phone) < 10 then
-    raise exception 'Telefone inválido';
-  end if;
-
-  perform pg_advisory_xact_lock(hashtext(v_phone));
-
-  select id into v_customer_id
-  from customers
-  where regexp_replace(coalesce(phone,''), '[^0-9]', '', 'g') = v_phone
-  order by id desc
-  limit 1;
-
-  if v_customer_id is null then
-    v_customer_id := floor(extract(epoch from clock_timestamp()) * 1000)::bigint;
-    insert into customers (id, name, phone, email, city, orders, spent, last_order, since)
-    values (
-      v_customer_id, trim(p_customer_name), trim(p_phone),
-      nullif(trim(coalesce(p_email,'')),''),
-      trim(coalesce(p_city,'')), 0, 0, '—', v_now
-    );
-  else
-    update customers
-       set name = trim(p_customer_name),
-           phone = trim(p_phone),
-           email = coalesce(nullif(trim(coalesce(p_email,'')),''), email),
-           city = coalesce(nullif(trim(coalesce(p_city,'')),''), city)
-     where id = v_customer_id;
-  end if;
-
-  return jsonb_build_object('customer_id', v_customer_id);
-exception
-  when unique_violation then
-    raise exception 'Não foi possível registrar o cliente. Tente novamente.';
-end;
-$$;
-
-revoke all on function public.save_public_customer(text,text,text,text) from public;
-grant execute on function public.save_public_customer(text,text,text,text) to anon, authenticated;
-
-
 create or replace function public.create_public_order(
   p_order_id text,
   p_customer_name text,
@@ -300,6 +240,223 @@ declare
   v_product_id bigint;
   v_qty integer;
 begin
+  select * into v_order from orders where id = p_order_id for update;
+  if not found then raise exception 'Pedido não encontrado'; end if;
+  if v_order.stock_reserved = p_reserved then return; end if;
+
+  if p_reserved then
+    for v_item in select * from jsonb_array_elements(v_order.products) loop
+      v_product_id := nullif(v_item->>'productId','')::bigint;
+      v_qty := greatest(1, coalesce((v_item->>'qty')::integer, 1));
+      if v_product_id is null or not exists (select 1 from products where id=v_product_id and active=true and stock>=v_qty) then
+        raise exception 'Estoque insuficiente para reativar o pedido';
+      end if;
+    end loop;
+    for v_item in select * from jsonb_array_elements(v_order.products) loop
+      v_product_id := (v_item->>'productId')::bigint;
+      v_qty := greatest(1, coalesce((v_item->>'qty')::integer, 1));
+      update products set stock=stock-v_qty where id=v_product_id;
+    end loop;
+  else
+    for v_item in select * from jsonb_array_elements(v_order.products) loop
+      v_product_id := nullif(v_item->>'productId','')::bigint;
+      v_qty := greatest(1, coalesce((v_item->>'qty')::integer, 1));
+      if v_product_id is not null then update products set stock=stock+v_qty where id=v_product_id; end if;
+    end loop;
+  end if;
+  update orders set stock_reserved=p_reserved where id=p_order_id;
+end;
+$$;
+
+revoke all on function public.set_order_stock_reservation(text,boolean) from public;
+grant execute on function public.set_order_stock_reservation(text,boolean) to authenticated;
+
+-- ════════════════════════════════════════════════════════════════════════
+-- FASE FINAL — configurações, galeria, pagamento, histórico e segurança
+-- Pode rodar este bloco quantas vezes quiser: tudo é idempotente.
+-- ════════════════════════════════════════════════════════════════════════
+
+-- ─── 1) SEGURANÇA: quem pode ser administrador ─────────────────────────────
+-- Antes, qualquer usuário autenticado no Supabase tinha acesso total ao
+-- Admin. Agora só quem estiver nesta tabela.
+create table if not exists admin_users (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  email   text
+);
+alter table admin_users enable row level security;
+drop policy if exists "admin le sua propria linha" on admin_users;
+create policy "admin le sua propria linha" on admin_users
+  for select using (auth.uid() = user_id);
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from admin_users where user_id = auth.uid());
+$$;
+
+-- IMPORTANTE — depois de rodar este script, cadastre os administradores
+-- (você e a proprietária), ou ninguém vai conseguir ler/gravar nada no
+-- Admin (o login continua funcionando, mas todas as telas ficarão vazias).
+-- Troque o e-mail pelo já usado no login do Admin e rode para cada um:
+--
+--   insert into admin_users (user_id, email)
+--   select id, email from auth.users where email = 'seuemail@exemplo.com'
+--   on conflict (user_id) do nothing;
+
+-- Substitui as políticas antigas (baseadas em "qualquer autenticado") pelas
+-- novas, baseadas em admin_users.
+drop policy if exists "admin acesso total produtos" on products;
+create policy "admin acesso total produtos" on products
+  for all using (is_admin()) with check (is_admin());
+
+drop policy if exists "admin acesso total avaliacoes" on reviews;
+create policy "admin acesso total avaliacoes" on reviews
+  for all using (is_admin()) with check (is_admin());
+
+drop policy if exists "admin acesso total clientes" on customers;
+create policy "admin acesso total clientes" on customers
+  for all using (is_admin()) with check (is_admin());
+
+drop policy if exists "admin acesso total pedidos" on orders;
+create policy "admin acesso total pedidos" on orders
+  for all using (is_admin()) with check (is_admin());
+
+-- ─── 2) CONFIGURAÇÕES (Admin → Supabase → Site público) ────────────────────
+create table if not exists site_settings (
+  id             integer primary key default 1,
+  nome           text,
+  whatsapp       text,
+  instagram      text,
+  email          text,
+  horario        text,
+  pix_key        text,
+  frete_floriano numeric not null default 0,
+  frete_barao    numeric not null default 0,
+  slogans        text[] not null default '{}',
+  constraint site_settings_singleton check (id = 1)
+);
+
+insert into site_settings (id, nome, whatsapp, instagram, email, horario, pix_key, frete_floriano, frete_barao, slogans)
+values (
+  1, 'BC Bom Feito Confeitaria', '(89) 99411-2439', 'bcconfeitaria_doces',
+  'emillesilva879@gmail.com', 'Qua – Dom · 14h às 20h', 'ludmyla.emille1412@gmail.com',
+  3.00, 4.00,
+  array['Feito com carinho, servido em cada colher.','Transformando momentos em doces lembranças.','O sabor que abraça o coração.']
+)
+on conflict (id) do nothing;
+
+alter table site_settings enable row level security;
+drop policy if exists "public le configuracoes" on site_settings;
+create policy "public le configuracoes" on site_settings
+  for select using (true);
+drop policy if exists "admin edita configuracoes" on site_settings;
+create policy "admin edita configuracoes" on site_settings
+  for all using (is_admin()) with check (is_admin());
+
+-- ─── 3) GALERIA (Admin → Supabase Storage → Site público) ──────────────────
+create table if not exists gallery_items (
+  id         bigint primary key,
+  name       text not null,
+  category   text not null default 'produto',
+  url        text not null,
+  created_at timestamptz not null default now()
+);
+alter table gallery_items enable row level security;
+drop policy if exists "public le galeria" on gallery_items;
+create policy "public le galeria" on gallery_items
+  for select using (true);
+drop policy if exists "admin acesso total galeria" on gallery_items;
+create policy "admin acesso total galeria" on gallery_items
+  for all using (is_admin()) with check (is_admin());
+
+-- Buckets de Storage para upload real de imagens (produtos e galeria).
+insert into storage.buckets (id, name, public)
+values ('product-images', 'product-images', true)
+on conflict (id) do nothing;
+
+insert into storage.buckets (id, name, public)
+values ('gallery', 'gallery', true)
+on conflict (id) do nothing;
+
+drop policy if exists "public le imagens de produtos" on storage.objects;
+create policy "public le imagens de produtos" on storage.objects
+  for select using (bucket_id = 'product-images');
+drop policy if exists "admin escreve imagens de produtos" on storage.objects;
+create policy "admin escreve imagens de produtos" on storage.objects
+  for all using (bucket_id = 'product-images' and is_admin())
+  with check (bucket_id = 'product-images' and is_admin());
+
+drop policy if exists "public le imagens da galeria" on storage.objects;
+create policy "public le imagens da galeria" on storage.objects
+  for select using (bucket_id = 'gallery');
+drop policy if exists "admin escreve imagens da galeria" on storage.objects;
+create policy "admin escreve imagens da galeria" on storage.objects
+  for all using (bucket_id = 'gallery' and is_admin())
+  with check (bucket_id = 'gallery' and is_admin());
+
+-- ─── 4) PAGAMENTO: pedido recebido ≠ pagamento recebido ────────────────────
+alter table orders add column if not exists payment_status text not null default 'pendente';
+
+-- ─── 5) HISTÓRICO DE STATUS DO PEDIDO ───────────────────────────────────────
+-- Registrado automaticamente por trigger — funciona não importa por onde o
+-- status seja alterado, sem depender de nenhum código específico do Admin.
+create table if not exists order_status_log (
+  id             bigserial primary key,
+  order_id       text not null references orders(id) on delete cascade,
+  status         text not null,
+  payment_status text,
+  changed_at     timestamptz not null default now()
+);
+alter table order_status_log enable row level security;
+drop policy if exists "admin acesso total historico pedidos" on order_status_log;
+create policy "admin acesso total historico pedidos" on order_status_log
+  for all using (is_admin()) with check (is_admin());
+
+create or replace function public.log_order_status_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if (tg_op = 'INSERT') then
+    insert into order_status_log (order_id, status, payment_status)
+    values (new.id, new.status, new.payment_status);
+  elsif (tg_op = 'UPDATE') and
+        (new.status is distinct from old.status or new.payment_status is distinct from old.payment_status) then
+    insert into order_status_log (order_id, status, payment_status)
+    values (new.id, new.status, new.payment_status);
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_log_order_status_change on orders;
+create trigger trg_log_order_status_change
+  after insert or update on orders
+  for each row execute function public.log_order_status_change();
+
+-- Reforça no próprio banco que só administrador reserva/libera estoque.
+create or replace function public.set_order_stock_reservation(p_order_id text, p_reserved boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_order orders%rowtype;
+  v_item jsonb;
+  v_product_id bigint;
+  v_qty integer;
+begin
+  if not public.is_admin() then
+    raise exception 'Acesso negado: apenas administradores';
+  end if;
+
   select * into v_order from orders where id = p_order_id for update;
   if not found then raise exception 'Pedido não encontrado'; end if;
   if v_order.stock_reserved = p_reserved then return; end if;
