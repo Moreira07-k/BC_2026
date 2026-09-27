@@ -1398,6 +1398,11 @@ function MainSite() {
                 });
                 if (orderError) {
                   console.error("Erro ao registrar pedido:", orderError.message);
+                  alert(
+                    "Não foi possível registrar seu pedido agora. Por favor, tente novamente em instantes.\n\n" +
+                    "Se o problema continuar, entre em contato pelo WhatsApp: " + WA + "\n\n" +
+                    "Detalhe técnico: " + orderError.message
+                  );
                   return;
                 }
                 wa(`Olá! Gostaria de fazer um pedido:\n\n${clienteStr}\n\n${lines}${entregaStr}${totalStr}${pagamentoStr}\n🧾 Pedido: ${orderId}\n\nBC Bom Feito Confeitaria`);

@@ -221,17 +221,34 @@ function useSupabaseTable<T extends { id: string | number }>(
     });
     const toDeleteIds = prev.filter(i => !nextMap.has(String(i.id))).map(i => i.id);
 
+    const errors: string[] = [];
+
     if (toInsert.length) {
       const { error } = await supabase.from(table).insert(toInsert.map(mapToDb));
-      if (error) setError(error.message);
+      if (error) errors.push(error.message);
     }
     for (const item of toUpdate) {
       const { error } = await supabase.from(table).update(mapToDb(item)).eq("id", item.id);
-      if (error) setError(error.message);
+      if (error) errors.push(error.message);
     }
     if (toDeleteIds.length) {
       const { error } = await supabase.from(table).delete().in("id", toDeleteIds);
-      if (error) setError(error.message);
+      if (error) errors.push(error.message);
+    }
+
+    if (errors.length) {
+      const message = errors.join(" | ");
+      setError(message);
+      // A gravação falhou de verdade: desfaz a mudança otimista na tela para
+      // não fingir que salvou, e avisa a pessoa com o motivo exato.
+      setItemsState(prev);
+      alert(
+        `Não foi possível salvar a alteração em "${table}". A tela vai voltar ao valor anterior.\n\n` +
+        `Detalhe técnico: ${message}\n\n` +
+        `Se isso continuar, faça login novamente ou verifique as permissões (RLS) da tabela "${table}" no Supabase.`
+      );
+    } else {
+      setError(null);
     }
   };
 
