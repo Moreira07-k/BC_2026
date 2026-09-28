@@ -197,7 +197,8 @@ function useLocalStorage<T>(key: string, seed: T) {
 function useSupabaseTable<T extends { id: string | number }>(
   table: string,
   mapFromDb: (row: any) => T,
-  mapToDb: (item: T) => Record<string, any>
+  mapToDb: (item: T) => Record<string, any>,
+  enabled = true,
 ) {
   const [items, setItemsState] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
@@ -207,15 +208,34 @@ function useSupabaseTable<T extends { id: string | number }>(
 
   useEffect(() => {
     let active = true;
+
+    // O painel só consulta as tabelas depois que o Supabase terminou de
+    // restaurar a sessão. Isso evita a primeira consulta sair sem o JWT
+    // do administrador e retornar uma lista vazia por causa do RLS.
+    if (!enabled) {
+      setLoading(true);
+      return () => { active = false; };
+    }
+
+    setLoading(true);
+    setError(null);
+
     supabase.from(table).select("*").then(({ data, error }) => {
       if (!active) return;
-      if (error) { setError(error.message); setLoading(false); return; }
+      if (error) {
+        console.error(`Erro ao carregar ${table}:`, error);
+        setError(error.message);
+        setItemsState([]);
+        setLoading(false);
+        return;
+      }
       setItemsState((data || []).map(mapFromDb));
       setLoading(false);
     });
+
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table]);
+  }, [table, enabled]);
 
   const syncToSupabase = async (prev: T[], next: T[]) => {
     const prevMap = new Map(prev.map(i => [String(i.id), i]));
@@ -1654,10 +1674,12 @@ export default function Admin() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  const [products,  setProducts,  loadingProducts]  = useSupabaseTable<AdminProduct>("products", productFromDb, productToDb);
-  const [orders,    setOrders,    loadingOrders]    = useSupabaseTable<AdminOrder>("orders", orderFromDb, orderToDb);
-  const [customers, setCustomers, loadingCustomers] = useSupabaseTable<AdminCustomer>("customers", customerFromDb, customerToDb);
-  const [reviews,   setReviews,   loadingReviews]   = useSupabaseTable<AdminReview>("reviews", reviewFromDb, reviewToDb);
+  const dataEnabled = session !== undefined && !!session;
+
+  const [products,  setProducts,  loadingProducts,  productsError]  = useSupabaseTable<AdminProduct>("products", productFromDb, productToDb, dataEnabled);
+  const [orders,    setOrders,    loadingOrders,    ordersError]    = useSupabaseTable<AdminOrder>("orders", orderFromDb, orderToDb, dataEnabled);
+  const [customers, setCustomers, loadingCustomers, customersError] = useSupabaseTable<AdminCustomer>("customers", customerFromDb, customerToDb, dataEnabled);
+  const [reviews,   setReviews,   loadingReviews,   reviewsError]   = useSupabaseTable<AdminReview>("reviews", reviewFromDb, reviewToDb, dataEnabled);
 
   const logout = () => supabase.auth.signOut();
   const nav    = (s: string) => { setSection(s); setMobileSB(false); };
@@ -1690,6 +1712,7 @@ export default function Admin() {
 
   const user = session.user.email as string;
   const dataLoading = loadingProducts || loadingOrders || loadingCustomers || loadingReviews;
+  const dataError = productsError || ordersError || customersError || reviewsError;
 
   const Sidebar = () => (
     <div className="flex flex-col h-full">
@@ -1773,7 +1796,15 @@ export default function Admin() {
               <div className="w-7 h-7 border-4 border-[#C4B5FD] border-t-[#9B5DE5] rounded-full animate-spin" />
             </div>
           ) : (
-            <motion.div key={section} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }}>
+            <>
+              {dataError && (
+                <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <p className="font-bold">Não foi possível carregar os dados do painel.</p>
+                  <p className="mt-1 text-xs text-red-600">{dataError}</p>
+                  <p className="mt-1 text-xs text-red-500">Atualize a página depois de confirmar que sua sessão de administrador está ativa.</p>
+                </div>
+              )}
+              <motion.div key={section} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }}>
               {section === "dashboard"     && <Dashboard orders={orders} products={products} customers={customers} reviews={reviews} />}
               {section === "produtos"      && <ProdutosSection products={products} setProducts={setProducts} />}
               {section === "pedidos"       && <PedidosSection orders={orders} setOrders={setOrders} customers={customers} setCustomers={setCustomers} products={products} />}
@@ -1781,7 +1812,8 @@ export default function Admin() {
               {section === "avaliacoes"    && <AvaliacoesSection reviews={reviews} setReviews={setReviews} />}
               {section === "galeria"       && <GaleriaSection />}
               {section === "configuracoes" && <ConfigSection />}
-            </motion.div>
+              </motion.div>
+            </>
           )}
         </main>
       </div>
