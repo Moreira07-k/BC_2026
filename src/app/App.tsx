@@ -159,7 +159,8 @@ function MainSite() {
         setSiteProducts(data.map((r: any) => ({
           id: Number(r.id), name: r.name, tagline: r.tagline ?? "",
           description: r.description ?? "", layers: r.layers ?? [],
-          price: Number(r.price ?? 0), image: r.image_url || fallbackImages[Number(r.id)] || FALLBACK_IMAGES[1],
+          price: Number(r.price ?? 0), originalPrice: r.original_price == null ? undefined : Number(r.original_price),
+          promotionActive: !!r.promotion_active, image: r.image_url || fallbackImages[Number(r.id)] || FALLBACK_IMAGES[1],
           category: r.category ?? "especial", bestseller: !!r.bestseller, isNew: !!r.is_new,
           stock: Number(r.stock ?? 0),
         } as Product & { stock: number })));
