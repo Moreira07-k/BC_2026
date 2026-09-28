@@ -1408,8 +1408,10 @@ function GaleriaSection() {
   const { msg, show } = useToast();
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [name, setName]   = useState("");
-  const [cat, setCat]     = useState("produto");
+  const [name, setName] = useState("");
+  const [cat, setCat] = useState("produto");
+  const [filter, setFilter] = useState("todos");
+  const [search, setSearch] = useState("");
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1425,23 +1427,41 @@ function GaleriaSection() {
   };
   useEffect(load, []);
 
-  const handleFile = async (file: File) => {
-    if (!name.trim()) { show("Dê um nome para a imagem antes de escolher o arquivo."); return; }
+  const handleFiles = async (files: FileList | File[]) => {
+    const selected = Array.from(files).filter(f => f.type.startsWith("image/"));
+    if (!selected.length) { show("Selecione pelo menos uma imagem."); return; }
     setUploading(true);
-    const ext = file.name.split(".").pop() || "jpg";
-    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error: upErr } = await supabase.storage.from("gallery").upload(path, file, { upsert: false });
-    if (upErr) { show("Não foi possível enviar a imagem: " + upErr.message); setUploading(false); return; }
-    const { data: pub } = supabase.storage.from("gallery").getPublicUrl(path);
-    const id = Date.now();
-    const { error: insErr } = await supabase.from("gallery_items").insert({
-      id, name: name.trim(), category: cat, url: pub.publicUrl,
-    });
-    if (insErr) { show("Não foi possível salvar a imagem: " + insErr.message); setUploading(false); return; }
-    setItems(prev => [{ id, name: name.trim(), category: cat, url: pub.publicUrl, path }, ...prev]);
-    setName(""); setUploading(false);
+    let added = 0;
+
+    for (const file of selected) {
+      const ext = file.name.split(".").pop() || "jpg";
+      const safeBase = (name.trim() || file.name.replace(/\.[^.]+$/, "")).trim();
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("gallery").upload(path, file, { upsert: false });
+      if (upErr) { show("Erro ao enviar " + file.name + ": " + upErr.message); continue; }
+
+      const { data: pub } = supabase.storage.from("gallery").getPublicUrl(path);
+      const id = Date.now() + added;
+      const { error: insErr } = await supabase.from("gallery_items").insert({
+        id, name: selected.length === 1 ? safeBase : file.name.replace(/\.[^.]+$/, ""),
+        category: cat, url: pub.publicUrl,
+      });
+      if (insErr) { await supabase.storage.from("gallery").remove([path]); show("Erro ao salvar " + file.name + ": " + insErr.message); continue; }
+
+      setItems(prev => [{
+        id,
+        name: selected.length === 1 ? safeBase : file.name.replace(/\.[^.]+$/, ""),
+        category: cat,
+        url: pub.publicUrl,
+        path,
+      }, ...prev]);
+      added++;
+    }
+
+    setName("");
+    setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
-    show("Imagem adicionada!");
+    show(`${added} imagem(ns) adicionada(s) à galeria!`);
   };
 
   const remove = async (item: GalleryItem) => {
@@ -1449,51 +1469,93 @@ function GaleriaSection() {
     if (error) { show("Não foi possível remover: " + error.message); return; }
     if (item.path) await supabase.storage.from("gallery").remove([item.path]);
     setItems(prev => prev.filter(i => i.id !== item.id));
-    show("Removida!");
+    show("Imagem removida.");
   };
+
+  const visibleItems = items.filter(item =>
+    (filter === "todos" || item.category === filter) &&
+    item.name.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="space-y-5">
       {msg && <Toast msg={msg} />}
+
       <div className="bg-white rounded-3xl border border-[#E5E7EB] shadow-sm p-5">
-        <h3 className="font-black text-gray-900 mb-4" style={{ fontFamily: "'Fredoka',sans-serif" }}>Adicionar à Galeria</h3>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <input type="text" placeholder="Nome da imagem" value={name} onChange={e => setName(e.target.value)}
-            className="flex-1 px-4 py-2.5 rounded-2xl border border-[#E5E7EB] bg-[#F9F0FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#C4B5FD]" />
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 className="font-black text-gray-900" style={{ fontFamily: "'Fredoka',sans-serif" }}>Galeria da BC</h3>
+            <p className="text-xs text-gray-400 mt-1">Adicione uma ou várias fotos. Elas ficam no Supabase Storage e podem aparecer no site público.</p>
+          </div>
+          <span className="text-xs font-black bg-purple-50 text-[#9B5DE5] px-3 py-1.5 rounded-full">{items.length} foto(s)</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_170px_1fr] gap-3">
+          <input type="text" placeholder="Nome da foto (opcional)" value={name} onChange={e => setName(e.target.value)}
+            className="px-4 py-2.5 rounded-2xl border border-[#E5E7EB] bg-[#F9F0FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#C4B5FD]" />
           <select value={cat} onChange={e => setCat(e.target.value)}
             className="px-4 py-2.5 rounded-2xl border border-[#E5E7EB] bg-[#F9F0FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#C4B5FD]">
-            {["produto","destaque","evento","outro"].map(c=><option key={c} value={c} className="capitalize">{c}</option>)}
+            {["produto","destaque","evento","outro"].map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-          <input ref={fileInputRef} type="file" accept="image/*" disabled={uploading}
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-            className="flex-1 text-sm file:mr-3 file:py-2.5 file:px-4 file:rounded-2xl file:border-0 file:font-bold file:bg-gradient-to-r file:from-[#9B5DE5] file:to-[#7C3AED] file:text-white file:cursor-pointer disabled:opacity-50" />
+          <input ref={fileInputRef} type="file" accept="image/*" multiple disabled={uploading}
+            onChange={e => { if (e.target.files?.length) handleFiles(e.target.files); }}
+            className="text-sm file:mr-3 file:py-2.5 file:px-4 file:rounded-2xl file:border-0 file:font-bold file:bg-gradient-to-r file:from-[#9B5DE5] file:to-[#7C3AED] file:text-white file:cursor-pointer disabled:opacity-50" />
         </div>
-        <p className="text-xs text-gray-400 mt-3">{uploading ? "Enviando imagem..." : "A imagem é enviada direto para o Supabase Storage e aparece no site assim que salva."}</p>
+
+        <div className="mt-3 flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-300" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Pesquisar na galeria..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-[#E5E7EB] bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-[#C4B5FD]" />
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            {["todos","produto","destaque","evento","outro"].map(c => (
+              <button key={c} onClick={() => setFilter(c)}
+                className={`px-3 py-2 rounded-xl text-xs font-bold capitalize transition-all ${filter === c ? "bg-[#9B5DE5] text-white" : "bg-gray-100 text-gray-500 hover:bg-purple-50 hover:text-[#9B5DE5]"}`}>
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <p className="text-xs text-gray-400 mt-3">
+          {uploading ? "Enviando imagens..." : "Dica: extraia o ZIP das fotos no computador e selecione várias imagens de uma vez."}
+        </p>
       </div>
+
       {loading ? (
-        <p className="text-center text-gray-400 text-sm py-8">Carregando...</p>
+        <p className="text-center text-gray-400 text-sm py-8">Carregando galeria...</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {items.map(item => (
-            <div key={item.id} className="bg-white rounded-3xl border border-[#E5E7EB] shadow-sm overflow-hidden group">
-              <div className="relative h-36 bg-purple-50">
-                <img src={item.url} alt={item.name} className="w-full h-full object-cover"
-                  onError={e => { (e.target as HTMLImageElement).style.opacity="0"; }} />
-                <button onClick={() => remove(item)}
-                  className="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow">
-                  <X size={12}/>
-                </button>
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {visibleItems.map(item => (
+              <div key={item.id} className="bg-white rounded-3xl border border-[#E5E7EB] shadow-sm overflow-hidden group hover:shadow-md transition-shadow">
+                <div className="relative aspect-square bg-purple-50">
+                  <img src={item.url} alt={item.name} loading="lazy" className="w-full h-full object-cover"
+                    onError={e => { (e.target as HTMLImageElement).style.opacity = "0"; }} />
+                  <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/55 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                    <p className="text-white text-xs font-bold truncate">{item.name}</p>
+                  </div>
+                  <button onClick={() => remove(item)} title="Excluir imagem"
+                    className="absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow">
+                    <Trash2 size={13}/>
+                  </button>
+                </div>
+                <div className="p-3">
+                  <p className="font-bold text-sm text-gray-900 truncate">{item.name}</p>
+                  <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-semibold capitalize">{item.category}</span>
+                </div>
               </div>
-              <div className="p-3">
-                <p className="font-bold text-sm text-gray-900 truncate">{item.name}</p>
-                <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-semibold capitalize">{item.category}</span>
-              </div>
+            ))}
+          </div>
+          {visibleItems.length === 0 && (
+            <div className="bg-white rounded-3xl border border-dashed border-[#D8C7F2] text-center py-12">
+              <ImageIcon size={38} className="mx-auto mb-2 text-[#C4B5FD]" />
+              <p className="font-bold text-gray-700">Nenhuma foto encontrada</p>
+              <p className="text-xs text-gray-400 mt-1">Envie suas fotos ou ajuste os filtros.</p>
             </div>
-          ))}
-          {items.length === 0 && (
-            <p className="col-span-full text-center text-gray-400 text-sm py-8">Nenhuma imagem cadastrada ainda.</p>
           )}
-        </div>
+        </>
       )}
     </div>
   );
