@@ -23,12 +23,12 @@ import logoImg from "@/imports/logo.jpeg";
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 import type { Product } from "./siteData";
 import {
-  SLOGANS,
   PRODUCTS,
   GALLERY_ITEMS,
   FILTERS,
   DEFAULT_SETTINGS,
   calcFrete,
+  FALLBACK_IMAGES,
 } from "./siteData";
 import { openWhatsApp as wa } from "./whatsapp";
 
@@ -239,14 +239,11 @@ function MainSite() {
       if (error || !data?.length) {
         setSiteProducts(PRODUCTS);
       } else {
-        const fallbackImages: Record<number, string> = {
-          1: imgBombis, 2: imgBomuva, 3: imgOreo, 4: imgMousese,
-          5: imgMorango2, 6: imgMorangoPote, 7: imgBomuva,
-        };
+        const fallbackImages = FALLBACK_IMAGES;
         setSiteProducts(data.map((r: any) => ({
           id: Number(r.id), name: r.name, tagline: r.tagline ?? "",
           description: r.description ?? "", layers: r.layers ?? [],
-          price: Number(r.price ?? 0), image: r.image_url || fallbackImages[Number(r.id)] || imgBombis,
+          price: Number(r.price ?? 0), image: r.image_url || fallbackImages[Number(r.id)] || FALLBACK_IMAGES[1],
           category: r.category ?? "especial", bestseller: !!r.bestseller, isNew: !!r.is_new,
           stock: Number(r.stock ?? 0),
         } as Product & { stock: number })));
