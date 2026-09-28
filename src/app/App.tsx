@@ -8,9 +8,9 @@ import { motion } from "motion/react";
 // Supabase fica isolado no painel e nunca derruba o site público.
 const Admin = lazy(() => import("./Admin"));
 import {
-  ShoppingCart, Heart, Star, X, Plus, Minus,
+  ShoppingCart, Star, X, Plus, Minus,
   Menu as MenuIcon, ChevronUp, Search, Phone, UserRound,
-  Instagram, Clock, MapPin, Mail, Layers,
+  Instagram, Clock, MapPin, Mail,
   MessageCircle, ChefHat, Info, CheckCircle,
   Refrigerator, Truck, Banknote, CreditCard, QrCode, Copy
 } from "lucide-react";
