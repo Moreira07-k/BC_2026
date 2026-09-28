@@ -2,7 +2,6 @@ import imgBombis from "@/imports/52088.jpg";
 import imgBomuva from "@/imports/52084.jpg";
 import imgOreo from "@/imports/52080.jpg";
 import imgMousese from "@/imports/51587.jpg";
-import imgMorango1 from "@/imports/51580.jpg";
 import imgMorango2 from "@/imports/51650.jpg";
 import imgMorangoPote from "@/imports/morango-pote.jpg";
 
@@ -75,7 +74,7 @@ export const PRODUCTS: Product[] = [
     tagline: "Morango, Ninho e Cravejado",
     description: "Camadas pensadas para deixar cada colherada especial: morangos frescos, brigadeiro de Ninho cremoso e uma finalização crocante de cravejado.",
     layers: ["Morango", "Brigadeiro de Ninho", "Cravejado"],
-    price: 14.00, image: imgMorangoPote, category: "pote", bestseller: true, isNew: true,
+    price: 10.00, originalPrice: 14.00, promotionActive: true, image: imgMorangoPote, category: "pote", bestseller: true, isNew: true,
   },
   {
     id: 7,
@@ -90,12 +89,10 @@ export const PRODUCTS: Product[] = [
 export const GALLERY_ITEMS = [
   { id: 1, src: imgMorangoPote, alt: "Morango Cravejado", cls: "col-span-2 row-span-2" },
   { id: 2, src: imgMorango2, alt: "Bombom no Pote com Morango", cls: "" },
-  { id: 3, src: imgBomuva, alt: "Bomuva", cls: "" },
+  { id: 3, src: imgBomuva, alt: "Bomuva / Surpresa de Uva", cls: "" },
   { id: 4, src: imgOreo, alt: "Oreo", cls: "" },
   { id: 5, src: imgBombis, alt: "Bombis", cls: "" },
   { id: 6, src: imgMousese, alt: "Mousse de Maracujá", cls: "col-span-2" },
-  { id: 7, src: imgMorango1, alt: "Doces de Morango", cls: "" },
-  { id: 8, src: imgMorangoPote, alt: "Doces artesanais BC", cls: "" },
 ];
 
 export const FILTERS = [
