@@ -67,8 +67,9 @@ insert into products (id, name, tagline, description, price, category, stock, ac
   (2, 'Bomuva',              'Bombom de Uva',     '4 camadas: uva, brigadeiro branco e 2 de ganache.',                   12, 'frutas',    15, true, false, false, array['Uva verde','Brigadeiro Branco','Ganache','Ganache']),
   (3, 'Oreo',                'Sabor Oreo',        '3 camadas: Oreo triturado, brigadeiro branco e ganache.',             12, 'especial',  18, true, true,  false, array['Oreo triturado','Brigadeiro Branco','Ganache']),
   (4, 'Mousse de Maracujá',  'Recorde de Vendas', '2 camadas de mousse de maracujá e 1 de brigadeirão.',                 12, 'mousse',    12, true, true,  false, array['Mousse de Maracujá','Mousse de Maracujá','Brigadeirão']),
-  (5, 'Bombom Morango',      'O Queridinho',      '4 camadas: 2 de brigadeiro branco, brigadeiro tradicional e ganache.',12, 'frutas',    10, true, false, true,  array['Brigadeiro Branco','Brigadeiro Branco','Brigadeiro Tradicional','Ganache Meio Amargo']),
-  (6, 'Morango Cravejado',   'Novidade no Pote',  'Morango cravejado no pote com 3 camadas irresistíveis.',              12, 'frutas',    15, true, false, true,  array['Brigadeiro de Ninho','Morango','Creme Branco com Caramelo'])
+  (5, 'Bombom no Pote / Morango', 'Morango com Brigadeiro', 'Uma camada de brigadeiro de Ninho ou brigadeiro tradicional, finalizada com uma camada generosa de morango fresco.', 12, 'frutas', 10, true, false, true, array['Brigadeiro de Ninho ou Tradicional','Morango']),
+  (6, 'Morango Cravejado', 'Morango, Ninho e Cravejado', 'Uma camada de morango, uma camada de brigadeiro de Ninho e uma camada de cravejado.', 14, 'pote', 15, true, true, true, array['Morango','Brigadeiro de Ninho','Cravejado']),
+  (7, 'Surpresa de Uva', 'Uva com Brigadeiro', 'Duas camadas de brigadeiro branco ou tradicional com uma camada de uva fresca no centro.', 12, 'frutas', 15, true, false, true, array['Brigadeiro Branco ou Tradicional','Uva','Brigadeiro Branco ou Tradicional'])
 on conflict (id) do nothing;
 
 -- ─── ROW LEVEL SECURITY ────────────────────────────────────────────────────
