@@ -174,8 +174,13 @@ const DEFAULT_SETTINGS = {
 
 const WA = DEFAULT_SETTINGS.whatsapp;
 const PIX_KEY = DEFAULT_SETTINGS.pixKey;
-const wa = (msg = "Olá!\nGostaria de fazer um pedido na BC Bom Feito Confeitaria.", number = WA) =>
-  window.open(`https://wa.me/${number}?text=${encodeURIComponent(msg)}`, "_blank");
+const wa = (msg = "Olá!\nGostaria de fazer um pedido na BC Bom Feito Confeitaria.", number = WA) => {
+  const cleanNumber = String(number || WA).replace(/\\D/g, "");
+  const url = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(msg)}`;
+  // Navegação direta evita o bloqueio de pop-up quando o pedido passou
+  // primeiro pelo await do Supabase.
+  window.location.assign(url);
+};
 
 const fmt = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
