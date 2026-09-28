@@ -109,7 +109,7 @@ export const FILTERS = [
 
 export function calcFrete(cidade: string, uf: string, freteFloriano = 3.00, freteBarao = 4.00): number {
   const key = cidade.trim().toLowerCase()
-    .normalize("NFD").replace(/[\\u0300-\\u036f]/g, "");
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const estado = uf.trim().toUpperCase();
   if (key === "floriano" && estado === "PI") return freteFloriano;
   if (key === "barao de grajau" && estado === "MA") return freteBarao;
@@ -127,4 +127,14 @@ export const DEFAULT_SETTINGS = {
   freteFloriano: 3.00,
   freteBarao: 4.00,
   slogans: SLOGANS as string[],
+};
+
+export const FALLBACK_IMAGES: Record<number, string> = {
+  1: imgBombis,
+  2: imgBomuva,
+  3: imgOreo,
+  4: imgMousese,
+  5: imgMorango2,
+  6: imgMorangoPote,
+  7: imgBomuva,
 };
