@@ -15,7 +15,9 @@ create table if not exists products (
   active       boolean not null default true,
   bestseller   boolean not null default false,
   is_new       boolean not null default false,
-  layers       text[] not null default '{}'
+  layers       text[] not null default '{}',
+  promotion_active boolean not null default false,
+  original_price numeric
 );
 
 create table if not exists customers (
@@ -110,6 +112,8 @@ create policy "admin acesso total pedidos" on orders
 -- Imagem opcional administrável. O site mantém imagens locais como fallback
 -- para os produtos atuais, sem mudar a identidade visual.
 alter table products add column if not exists image_url text;
+alter table products add column if not exists promotion_active boolean not null default false;
+alter table products add column if not exists original_price numeric;
 alter table orders add column if not exists stock_reserved boolean not null default false;
 
 -- Nome não deve ser identificador único: duas pessoas podem ter o mesmo nome.
