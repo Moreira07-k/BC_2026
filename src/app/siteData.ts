@@ -13,6 +13,8 @@ export interface Product {
   description: string;
   layers: string[];
   price: number;
+  originalPrice?: number;
+  promotionActive?: boolean;
   image: string;
   category: string;
   stock?: number;
