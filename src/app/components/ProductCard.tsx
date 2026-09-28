@@ -29,6 +29,11 @@ function ProductCard({ p, onAdd, onBuy, isFav, onFav }: {
               ⭐ Mais Vendido
             </span>
           )}
+          {p.promotionActive && (
+            <span className="bg-amber-400 text-amber-900 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wide shadow">
+              🏷️ Promoção
+            </span>
+          )}
           {p.isNew && (
             <span className="bg-[#9B5DE5] text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wide shadow">
               Novo
@@ -42,10 +47,19 @@ function ProductCard({ p, onAdd, onBuy, isFav, onFav }: {
         </button>
 
         <div className="absolute bottom-3 left-3">
-          <span className="bg-white/90 backdrop-blur-sm text-[#9B5DE5] font-black text-lg px-3 py-1 rounded-2xl shadow-sm"
-            style={{ fontFamily: "'Fredoka', sans-serif" }}>
-            {fmt(p.price)}
-          </span>
+          {p.promotionActive && p.originalPrice && p.originalPrice > p.price ? (
+            <div className="bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-2xl shadow-sm">
+              <span className="block text-[10px] font-bold text-gray-400 line-through leading-none">{fmt(p.originalPrice)}</span>
+              <span className="text-[#16A34A] font-black text-lg leading-none" style={{ fontFamily: "'Fredoka', sans-serif" }}>
+                {fmt(p.price)}
+              </span>
+            </div>
+          ) : (
+            <span className="bg-white/90 backdrop-blur-sm text-[#9B5DE5] font-black text-lg px-3 py-1 rounded-2xl shadow-sm"
+              style={{ fontFamily: "'Fredoka', sans-serif" }}>
+              {fmt(p.price)}
+            </span>
+          )}
         </div>
       </div>
 
