@@ -16,7 +16,7 @@ import { supabase, supabaseConfigError } from "../lib/supabaseClient";
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 interface AdminProduct {
   id: number; name: string; tagline: string; description: string;
-  price: number; category: string; stock: number; imageUrl: string; active: boolean;
+  price: number; originalPrice?: number; promotionActive?: boolean; category: string; stock: number; imageUrl: string; active: boolean;
   bestseller: boolean; isNew: boolean; layers: string[];
 }
 
@@ -132,11 +132,13 @@ function nextOrderId(orders: AdminOrder[]) {
 // ─── MAPEAMENTO COM O SUPABASE (camelCase no app ↔ snake_case no banco) ───────
 const productFromDb = (r: any): AdminProduct => ({
   id: r.id, name: r.name, tagline: r.tagline ?? "", description: r.description ?? "",
-  price: Number(r.price ?? 0), category: r.category ?? "", stock: r.stock ?? 0, imageUrl: r.image_url ?? "",
+  price: Number(r.price ?? 0), originalPrice: r.original_price == null ? undefined : Number(r.original_price), promotionActive: !!r.promotion_active, category: r.category ?? "", stock: r.stock ?? 0, imageUrl: r.image_url ?? "",
   active: r.active, bestseller: r.bestseller, isNew: r.is_new, layers: r.layers ?? [],
 });
 const productToDb = (p: AdminProduct) => ({
   id: p.id, name: p.name, tagline: p.tagline, description: p.description, price: p.price,
+  original_price: p.promotionActive && p.originalPrice ? p.originalPrice : null,
+  promotion_active: !!p.promotionActive,
   category: p.category, stock: p.stock, image_url: p.imageUrl || null, active: p.active, bestseller: p.bestseller,
   is_new: p.isNew, layers: p.layers,
 });
@@ -545,7 +547,7 @@ function Dashboard({ orders, products, customers, reviews }: {
 }
 
 // ─── PRODUTOS ─────────────────────────────────────────────────────────────────
-const EMPTY: Omit<AdminProduct,"id"> = { name:"", tagline:"", description:"", price:12, category:"chocolate", stock:10, imageUrl:"", active:true, bestseller:false, isNew:false, layers:[] };
+const EMPTY: Omit<AdminProduct,"id"> = { name:"", tagline:"", description:"", price:12, originalPrice:undefined, promotionActive:false, category:"chocolate", stock:10, imageUrl:"", active:true, bestseller:false, isNew:false, layers:[] };
 
 function ProdutosSection({ products, setProducts }: { products: AdminProduct[]; setProducts: React.Dispatch<React.SetStateAction<AdminProduct[]>>; }) {
   const { msg, show } = useToast();
@@ -627,9 +629,19 @@ function ProdutosSection({ products, setProducts }: { products: AdminProduct[]; 
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="bg-gray-100 text-gray-500 text-xs font-semibold px-2.5 py-1 rounded-full capitalize">{p.category}</span>
+                    <div className="flex flex-wrap gap-1">
+                      <span className="bg-gray-100 text-gray-500 text-xs font-semibold px-2.5 py-1 rounded-full capitalize">{p.category}</span>
+                      {p.promotionActive && <span className="bg-amber-100 text-amber-700 text-[10px] font-black px-2 py-1 rounded-full">PROMOÇÃO</span>}
+                    </div>
                   </td>
-                  <td className="px-4 py-3 font-black text-[#9B5DE5]">{fmt(p.price)}</td>
+                  <td className="px-4 py-3">
+                    {p.promotionActive && p.originalPrice && p.originalPrice > p.price ? (
+                      <div>
+                        <span className="font-black text-green-600">{fmt(p.price)}</span>
+                        <span className="block text-[10px] text-gray-400 line-through">{fmt(p.originalPrice)}</span>
+                      </div>
+                    ) : <span className="font-black text-[#9B5DE5]">{fmt(p.price)}</span>}
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs font-bold ${p.stock === 0 ? "text-red-500" : p.stock < 5 ? "text-amber-500" : "text-green-600"}`}>
                       {p.stock === 0 ? "Esgotado" : `${p.stock} un.`}
@@ -686,16 +698,33 @@ function ProdutosSection({ products, setProducts }: { products: AdminProduct[]; 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Preço (R$)</label>
-                  <input type="number" step="0.01" value={modal.price}
+                  <input type="number" step="0.01" min="0" value={modal.price}
                     onChange={e => setModal(m => m ? { ...m, price: parseFloat(e.target.value) || 0 } : m)}
                     className="w-full px-4 py-2.5 rounded-2xl border border-[#E5E7EB] bg-[#F9F0FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#C4B5FD]" />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Estoque</label>
-                  <input type="number" value={modal.stock}
+                  <input type="number" min="0" value={modal.stock}
                     onChange={e => setModal(m => m ? { ...m, stock: parseInt(e.target.value) || 0 } : m)}
                     className="w-full px-4 py-2.5 rounded-2xl border border-[#E5E7EB] bg-[#F9F0FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#C4B5FD]" />
                 </div>
+              </div>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={!!modal.promotionActive}
+                    onChange={e => setModal(m => m ? { ...m, promotionActive: e.target.checked, originalPrice: e.target.checked ? (m.originalPrice || m.price) : undefined } : m)}
+                    className="accent-amber-500 w-4 h-4" />
+                  <span className="text-sm font-black text-amber-800">🏷️ Produto em promoção</span>
+                </label>
+                {modal.promotionActive && (
+                  <div>
+                    <label className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block mb-1.5">Preço anterior (R$)</label>
+                    <input type="number" step="0.01" min="0" value={modal.originalPrice ?? modal.price}
+                      onChange={e => setModal(m => m ? { ...m, originalPrice: parseFloat(e.target.value) || 0 } : m)}
+                      className="w-full px-4 py-2.5 rounded-2xl border border-amber-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                    <p className="text-[10px] text-amber-700 mt-1.5">O preço atual acima será o preço promocional exibido no site.</p>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Imagem do produto</label>
