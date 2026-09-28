@@ -3,10 +3,6 @@ import React, { useState, useEffect, Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route } from "react-router";
 import { motion } from "motion/react";
 
-// Carregado sob demanda: só baixa e executa o código do Admin (e do Supabase)
-// quando alguém visita /admin. Assim, qualquer erro de configuração do
-// Supabase fica isolado no painel e nunca derruba o site público.
-const Admin = lazy(() => import("./Admin"));
 import {
   ShoppingCart, Star, X, Plus, Minus,
   Menu as MenuIcon, ChevronUp, Search, Phone, UserRound,
@@ -31,6 +27,11 @@ import {
   FALLBACK_IMAGES,
 } from "./siteData";
 import { openWhatsApp as wa } from "./whatsapp";
+
+// Carregado sob demanda: só baixa e executa o código do Admin (e do Supabase)
+// quando alguém visita /admin. Assim, qualquer erro de configuração do
+// Supabase fica isolado no painel e nunca derruba o site público.
+const Admin = lazy(() => import("./Admin"));
 
 interface CartItem extends Product { qty: number; }
 
