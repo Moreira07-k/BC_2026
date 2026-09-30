@@ -760,8 +760,46 @@ function MainSite() {
               </a>
             </div>
           </div>
-          <div className="border-t border-white/10 mt-8 pt-6 text-center text-white/30 text-xs">
-            © {new Date().getFullYear()} BC Bom Feito Confeitaria · Todos os direitos reservados
+          <div className="border-t border-white/10 mt-8 pt-6 flex flex-col items-center gap-2 text-center">
+            <p className="text-white/30 text-xs">
+              © {new Date().getFullYear()} BC Bom Feito Confeitaria · Todos os direitos reservados
+            </p>
+            <div className="text-white/40 text-xs">
+              Desenvolvido por{" "}
+              <a
+                href="https://github.com/Moreira07-k"
+                target="_blank"
+                rel="noreferrer"
+                className="text-white/65 font-bold hover:text-white transition-colors"
+              >
+                Kauã Moreira de Souza Silva
+              </a>
+              {" · "}
+              <a
+                href="https://wa.me/55899942913"
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-[#25D366] transition-colors"
+              >
+                WhatsApp
+              </a>
+              {" · "}
+              <a
+                href="https://www.instagram.com/moreira_C7"
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-[#F15BB5] transition-colors"
+              >
+                Instagram
+              </a>
+              {" · "}
+              <a
+                href="mailto:moreirakaua787@gmail.com"
+                className="hover:text-[#C4B5FD] transition-colors"
+              >
+                E-mail
+              </a>
+            </div>
           </div>
         </div>
       </footer>
