@@ -1,7 +1,7 @@
 {
-  "name": "@figma/my-make-file",
+  "name": "bc-bom-feito-confeitaria",
   "private": true,
-  "version": "0.0.1",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "build": "vite build",
@@ -89,5 +89,6 @@
     "overrides": {
       "vite": "6.3.5"
     }
-  }
+  },
+  "description": "Plataforma web da BC Bom Feito Confeitaria — catálogo, pedidos, clientes, estoque e painel administrativo."
 }
