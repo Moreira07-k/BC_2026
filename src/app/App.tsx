@@ -357,8 +357,8 @@ function MainSite() {
       <section id="home"
         className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden pt-24 pb-16 px-4"
         style={{ background: "radial-gradient(ellipse at 20% 50%,#F3E8FF 0%,transparent 50%),radial-gradient(ellipse at 80% 20%,#FFE4EF 0%,transparent 50%),radial-gradient(ellipse at 60% 80%,#FFF0E6 0%,transparent 50%),#FFF5EF" }}>
-        <div className="absolute top-1/4 left-10 w-64 h-64 rounded-full bg-[#C4B5FD]/20 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-1/4 right-10 w-80 h-80 rounded-full bg-[#FFB3C6]/20 blur-3xl pointer-events-none" />
+        <div className="absolute top-1/4 left-10 w-64 h-64 rounded-full bg-[#C4B5FD]/20 blur-3xl pointer-events-none bc-float" />
+        <div className="absolute bottom-1/4 right-10 w-80 h-80 rounded-full bg-[#FFB3C6]/20 blur-3xl pointer-events-none bc-float-reverse" />
 
         <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease: "easeOut" }} className="text-center z-10 max-w-2xl">
@@ -366,7 +366,7 @@ function MainSite() {
           <motion.div initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.7 }} className="mb-7">
             <ImageWithFallback src={logoImg} alt="BC Bom Feito Confeitaria"
-              className="w-44 h-44 md:w-56 md:h-56 rounded-full object-cover mx-auto shadow-2xl shadow-[#9B5DE5]/25 border-4 border-white/70" />
+              className="w-44 h-44 md:w-56 md:h-56 rounded-full object-cover mx-auto shadow-2xl shadow-[#9B5DE5]/25 border-4 border-white/70 bc-float" />
           </motion.div>
 
           <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
