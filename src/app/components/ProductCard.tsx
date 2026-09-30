@@ -108,4 +108,4 @@ function ProductCard({ p, onAdd, onBuy, isFav, onFav }: {
   );
 }
 
-
+export default ProductCard;
