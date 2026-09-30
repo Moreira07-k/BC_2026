@@ -1,95 +1,62 @@
-# 🍰 BC Bom Feito Confeitaria
+# BC Bom Feito Confeitaria
 
-> Plataforma web para catálogo, pedidos e gestão de uma confeitaria artesanal.
+Site institucional e catálogo online da BC Bom Feito Confeitaria, com recursos para pedidos, cadastro de clientes e gerenciamento interno.
 
-[![React](https://img.shields.io/badge/React-18.3.1-61DAFB?logo=react&logoColor=white)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
-[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com/)
-[![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+## Sobre
 
-## ✨ Sobre o projeto
+O projeto foi desenvolvido para centralizar a operação da confeitaria em uma única aplicação.
 
-O **BC Bom Feito Confeitaria** reúne, em uma única aplicação, a experiência de compra do cliente e a gestão interna da loja.
+O site público apresenta os produtos, recebe os dados necessários para o pedido e encaminha a finalização para o WhatsApp. O painel administrativo permite acompanhar produtos, estoque, pedidos, clientes, avaliações e conteúdo da loja.
 
-O projeto foi estruturado para manter o site público, o painel administrativo e o banco de dados sincronizados:
+Os dados são armazenados no Supabase, que funciona como fonte principal da aplicação.
 
-```text
-Cliente
-  ↓
-Site público
-  ↓
-Supabase
-  ├── Produtos
-  ├── Clientes
-  ├── Pedidos
-  ├── Estoque
-  ├── Avaliações
-  ├── Galeria
-  └── Configurações
-  ↓
-Painel administrativo
-```
+## Principais recursos
 
-A ideia central é simples: **o Supabase é a fonte de verdade**. Alterações feitas no painel podem ser refletidas no site sem precisar editar manualmente os dados do frontend.
+### Site
 
-## 🛍️ Funcionalidades
-
-### Site público
-- 📱 Layout responsivo
-- 🍫 Catálogo de produtos
-- 🔎 Busca e filtros
-- 🛒 Carrinho de compras
-- 👤 Identificação do cliente
-- 📍 Entrega e retirada
-- 💳 PIX, cartão e dinheiro
-- 📦 Controle de estoque
-- 💬 Finalização pelo WhatsApp
-- ⭐ Avaliações com aprovação administrativa
-- 🖼️ Galeria de fotos
-- 🏷️ Promoções e preço anterior
-- ⚙️ Configurações carregadas do Supabase
+- Catálogo de produtos
+- Busca e filtros
+- Carrinho
+- Cadastro de informações do cliente
+- Entrega e retirada
+- Formas de pagamento
+- Controle de disponibilidade e estoque
+- Promoções
+- Avaliações
+- Galeria de produtos
+- Atendimento pelo WhatsApp
+- Layout responsivo
 
 ### Painel administrativo
-- 📊 Dashboard
-- 🍰 Cadastro e edição de produtos
-- 💰 Preços e promoções
-- 📦 Estoque
-- 🖼️ Imagens dos produtos
-- 🛍️ Pedidos
-- 👥 Clientes
-- ⭐ Avaliações
-- 🖼️ Galeria
-- ⚙️ Configurações da loja
-- 🔐 Controle de administradores
-- 🧾 Histórico de alterações de pedidos
 
-### Backend e segurança
-- PostgreSQL via Supabase
-- Row Level Security (RLS)
-- Funções RPC para operações públicas controladas
-- Registro de clientes vinculado a pedidos
-- Reserva e devolução de estoque
-- Storage para imagens
-- Histórico de status dos pedidos
-- Separação entre dados públicos e dados administrativos
+- Dashboard
+- Cadastro e edição de produtos
+- Controle de preços
+- Promoções
+- Estoque
+- Pedidos
+- Clientes
+- Avaliações
+- Galeria
+- Configurações da loja
+- Controle de acesso administrativo
+- Histórico de alterações de pedidos
 
-## 🧱 Stack
+## Tecnologias
 
-| Camada | Tecnologia |
-|---|---|
-| Interface | React + TypeScript |
-| Build | Vite |
-| Estilos | Tailwind CSS |
-| Animações | Motion |
-| Ícones | Lucide React |
-| Backend | Supabase |
-| Banco | PostgreSQL |
-| Storage | Supabase Storage |
-| Deploy | Vercel |
-| Controle de versão | Git + GitHub |
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- Motion
+- Lucide React
+- Supabase
+- PostgreSQL
+- Supabase Storage
+- Vercel
+- GitHub
 
-## 📁 Organização principal
+## Estrutura
 
 ```text
 BC_2026/
@@ -98,7 +65,6 @@ BC_2026/
 │   │   ├── components/
 │   │   ├── Admin.tsx
 │   │   ├── App.tsx
-│   │   ├── ProductCard.tsx
 │   │   ├── siteData.ts
 │   │   └── whatsapp.ts
 │   ├── imports/
@@ -108,15 +74,32 @@ BC_2026/
 ├── public/
 ├── .github/
 ├── .env.example
-├── .gitignore
 ├── SUPABASE_SETUP.md
-├── package.json
 └── README.md
 ```
 
-## 🚀 Desenvolvimento local
+## Dados e integração
 
-Clone o projeto:
+A aplicação utiliza o Supabase para manter os dados do catálogo e da operação.
+
+Entre as principais tabelas estão:
+
+- `products`
+- `customers`
+- `orders`
+- `reviews`
+- `gallery_items`
+- `site_settings`
+- `admin_users`
+- `order_status_log`
+
+As operações públicas relacionadas a clientes, pedidos e estoque utilizam funções do banco com regras específicas de acesso.
+
+O painel administrativo trabalha sobre os mesmos dados utilizados pelo site público. Assim, alterações de produtos, preços, estoque e promoções não precisam ser duplicadas no código do frontend.
+
+## Desenvolvimento
+
+Clone o repositório:
 
 ```bash
 git clone https://github.com/Moreira07-k/BC_2026.git
@@ -129,102 +112,75 @@ Instale as dependências:
 npm install
 ```
 
-Configure as variáveis de ambiente a partir de `.env.example`:
+Crie um arquivo `.env.local` baseado no `.env.example` e configure as variáveis do Supabase.
 
-```env
-VITE_SUPABASE_URL=sua_url
-VITE_SUPABASE_ANON_KEY=sua_chave_anon_public
-```
-
-Inicie o ambiente de desenvolvimento:
+Execute o projeto:
 
 ```bash
 npm run dev
 ```
 
-Teste o build de produção:
+Para gerar a versão de produção:
 
 ```bash
 npm run build
 ```
 
-## 🗄️ Supabase
+## Variáveis de ambiente
 
-O arquivo `supabase/schema.sql` concentra a estrutura e as regras do banco.
+Nunca envie credenciais privadas para o GitHub.
 
-Entre os recursos estão:
+Exemplo:
 
-- `products`
-- `customers`
-- `orders`
-- `reviews`
-- `gallery_items`
-- `site_settings`
-- `admin_users`
-- `order_status_log`
-
-Também existem funções controladas para operações do site, incluindo criação de pedidos e gerenciamento de estoque.
-
-> ⚠️ Nunca publique chaves privadas, tokens ou arquivos `.env` no Git.
-
-## 🔄 Fluxo de pedidos
-
-```text
-Produto
-  ↓
-Carrinho
-  ↓
-Dados do cliente
-  ↓
-Entrega / retirada
-  ↓
-Pagamento
-  ↓
-create_public_order()
-  ↓
-Cliente + Pedido + Estoque
-  ↓
-Painel administrativo
-  ↓
-WhatsApp
+```env
+VITE_SUPABASE_URL=sua_url
+VITE_SUPABASE_ANON_KEY=sua_chave_publica
 ```
 
-## 🏷️ Promoções
+## Deploy
 
-O catálogo suporta preço promocional sem perder o preço anterior.
+O projeto está integrado ao Vercel. Alterações enviadas para a branch `main` podem iniciar automaticamente um novo deploy.
+
+Fluxo utilizado:
+
+```text
+Desenvolvimento
+      ↓
+Git
+      ↓
+GitHub
+      ↓
+Vercel
+      ↓
+Aplicação publicada
+      ↓
+Supabase
+```
+
+## Commits
+
+As mensagens de commit seguem uma convenção simples:
+
+- `feat:` nova funcionalidade
+- `fix:` correção
+- `refactor:` refatoração
+- `style:` interface ou estilos
+- `docs:` documentação
+- `chore:` manutenção
 
 Exemplo:
 
 ```text
-Preço anterior: R$ 14,00
-Preço atual:    R$ 10,00
-Status:         Promoção
+feat: adiciona controle de promoções
+fix: corrige cadastro de clientes
+refactor: organiza componentes do catálogo
 ```
 
-A informação fica armazenada no banco e pode ser administrada pelo painel.
+## Manutenção
 
-## 🌐 Deploy
-
-O projeto utiliza **Vercel** para publicação e integração com o GitHub.
-
-O fluxo recomendado é:
-
-```text
-GitHub
-  ↓
-Vercel
-  ↓
-Aplicação publicada
-  ↓
-Supabase
-```
-
-Cada alteração enviada para a branch principal pode iniciar um novo deploy automático.
-
-## 🧪 Antes de publicar uma alteração
+Antes de enviar alterações importantes:
 
 ```bash
-npm install
 npm run build
 git status
 git add .
@@ -232,30 +188,18 @@ git commit -m "descreva a alteração"
 git push origin main
 ```
 
-## 📌 Convenção de commits
+## Autoria
 
-Prefira mensagens objetivas:
+Projeto desenvolvido e mantido por **Kauã Moreira de Souza Silva**.
 
-- `feat: adiciona nova funcionalidade`
-- `fix: corrige erro no pedido`
-- `refactor: reorganiza componente`
-- `style: ajusta interface`
-- `docs: atualiza documentação`
-- `chore: manutenção do projeto`
+GitHub: https://github.com/Moreira07-k
 
-## 🎯 Objetivos técnicos
+Contato:
 
-- Manter o site rápido e responsivo
-- Centralizar os dados no Supabase
-- Evitar duplicação de informações entre frontend e banco
-- Proteger dados administrativos com RLS
-- Facilitar manutenção e evolução do projeto
-- Manter uma identidade visual própria para a BC Bom Feito Confeitaria
+- WhatsApp: +55 89 99411-2913
+- Instagram: @moreira_C7
+- E-mail: moreirakaua787@gmail.com
 
 ---
 
-### 💜 Projeto
-
-**BC Bom Feito Confeitaria** — catálogo, pedidos e gestão em uma única plataforma.
-
-Desenvolvimento e manutenção realizados através de GitHub + Vercel + Supabase.
+BC Bom Feito Confeitaria
