@@ -16,14 +16,14 @@ function ProductCard({ p, onAdd, onBuy, isFav, onFav }: {
       initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }} transition={{ duration: 0.45 }}
       whileHover={{ y: -5 }}
-      className="bg-card rounded-3xl shadow-sm border border-border overflow-hidden flex flex-col group"
+      className="bg-card rounded-3xl shadow-sm border border-border overflow-hidden flex flex-col group bc-hover-lift"
     >
       <div className="relative overflow-hidden bg-[#F3E8FF]">
         <ImageWithFallback src={p.image} alt={p.name}
           className="w-full h-52 object-cover transition-transform duration-500 group-hover:scale-105" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
 
-        <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap">
+        <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap bc-bounce-in">
           {p.bestseller && (
             <span className="bg-amber-400 text-amber-900 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wide shadow">
               ⭐ Mais Vendido
@@ -42,7 +42,7 @@ function ProductCard({ p, onAdd, onBuy, isFav, onFav }: {
         </div>
 
         <button onClick={onFav}
-          className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/85 backdrop-blur-sm flex items-center justify-center shadow transition-transform hover:scale-110">
+          className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/85 backdrop-blur-sm flex items-center justify-center shadow transition-transform hover:scale-110 bc-favorite-pop">
           <Heart size={15} className={isFav ? "fill-rose-500 text-rose-500" : "text-gray-400"} />
         </button>
 
@@ -95,11 +95,11 @@ function ProductCard({ p, onAdd, onBuy, isFav, onFav }: {
 
         <div className="flex gap-2 mt-auto pt-1">
           <button onClick={onAdd} disabled={(p.stock ?? 1) <= 0}
-            className="flex-1 bg-secondary text-secondary-foreground text-sm font-bold py-2.5 rounded-2xl hover:bg-[#9B5DE5] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200">
+            className="flex-1 bg-secondary text-secondary-foreground text-sm font-bold py-2.5 rounded-2xl hover:bg-[#9B5DE5] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 hover:-translate-y-0.5">
             {(p.stock ?? 1) <= 0 ? "Esgotado" : "+ Carrinho"}
           </button>
           <button onClick={onBuy}
-            className="flex-1 bg-gradient-to-r from-[#9B5DE5] to-[#7C3AED] text-white text-sm font-bold py-2.5 rounded-2xl hover:opacity-90 transition-all shadow-sm">
+            className="flex-1 bg-gradient-to-r from-[#9B5DE5] to-[#7C3AED] text-white text-sm font-bold py-2.5 rounded-2xl hover:opacity-90 transition-all shadow-sm hover:-translate-y-0.5 hover:shadow-md">
             Pedir Agora
           </button>
         </div>
